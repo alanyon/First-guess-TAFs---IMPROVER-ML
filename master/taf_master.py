@@ -22,6 +22,10 @@ def main():
     """
     Calls other modules to generate TAFs.
     """
+    # Make output directory if needed
+    if not os.path.exists(VER_DIR):
+        make_dirs()
+
     # Define path that data will be stored in
     d_file = f'{co.TEST_DIR}/{TAF_START}'
 
@@ -85,6 +89,18 @@ def main():
 
         # Pickle data
         pickle_data(ml_data, icao_pickle)
+
+
+def make_dirs():
+    """
+    Creates required directories.
+    """
+    # Create main directory
+    os.system(f'mkdir {VER_DIR}')
+
+    # Create sub directories
+    for dir_name in ['pickles', 'tafs']:
+        os.system(f'mkdir {VER_DIR}/{dir_name}')
 
 
 def pickle_data(data, p_file):
