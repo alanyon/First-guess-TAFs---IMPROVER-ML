@@ -19,7 +19,7 @@ def calc_bust(row):
     return 'bust'
 
 
-def get_ml_df(site_df, bust_labels):
+def get_ml_df(site_df, bust_labels=None):
     """
     Organises data into dataframe for use with machine learning
     algorithms.
@@ -34,9 +34,6 @@ def get_ml_df(site_df, bust_labels):
     :return: Dataframe with required data
     :rtype: pandas.DataFrame
     """
-    # Unpack bust labels
-    wind_labels, dir_labels, vis_labels, cld_labels = bust_labels
-
     # Rearrange site_df
     ml_df = site_df.pivot(index='time', columns='percentile')
     
@@ -46,10 +43,13 @@ def get_ml_df(site_df, bust_labels):
     # Convert 'time' from index to column
     ml_df = ml_df.reset_index()  
 
-    ml_df['wind_bust_label'] = ml_df['time'].map(wind_labels)
-    ml_df['dir_bust_label'] = ml_df['time'].map(dir_labels)
-    ml_df['vis_bust_label'] = ml_df['time'].map(vis_labels)
-    ml_df['cld_bust_label'] = ml_df['time'].map(cld_labels)
+    # Add bust labels if required
+    if bust_labels:
+        wind_labels, dir_labels, vis_labels, cld_labels = bust_labels
+        ml_df['wind_bust_label'] = ml_df['time'].map(wind_labels)
+        ml_df['dir_bust_label'] = ml_df['time'].map(dir_labels)
+        ml_df['vis_bust_label'] = ml_df['time'].map(vis_labels)
+        ml_df['cld_bust_label'] = ml_df['time'].map(cld_labels)
 
     # Add columns based on date/time 
     ml_df['year'] = ml_df.apply(lambda x: x['time'].year, axis=1)
@@ -64,19 +64,21 @@ def get_ml_df(site_df, bust_labels):
     # Drop time column
     ml_df.drop('time', axis=1, inplace=True)
 
-    # Make bust_labels the last columns
-    cols = ml_df.columns.tolist()
-    for bust_label in co.BUST_COLS:
-        cols.append(cols.pop(cols.index(bust_label)))
-    ml_df = ml_df[cols]
+    # Make bust_labels the last columns if required
+    if bust_labels:
+        cols = ml_df.columns.tolist()
+        for bust_label in co.BUST_COLS:
+            cols.append(cols.pop(cols.index(bust_label)))
+        ml_df = ml_df[cols]
 
     # Change NaNs to no_bust (occurs when airport opens late or similar)
     for col in ml_df.columns:
         if 'bust' in col:
             ml_df[col] = ml_df[col].fillna('no_bust')
 
-    # Add a column to incorporate all busts
-    ml_df['any_bust'] = ml_df.apply(calc_bust, axis=1)
+    # Add a column to incorporate all busts if required
+    if bust_labels:
+        ml_df['any_bust'] = ml_df.apply(calc_bust, axis=1)
 
     return ml_df
 

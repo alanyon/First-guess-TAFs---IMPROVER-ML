@@ -298,13 +298,13 @@ def taf_text(site_data, bases_changes):
     num_spaces = 12 - len(ordered_groups)
     nice_taf += '\n' * num_spaces
 
-    print(nice_taf)
+    # print(nice_taf)
 
     # Create verification-friendly TAF
     ver_taf = ver_format(taf_str, site_data)
 
-    # Return TAF in format for bust verifying code
-    return ver_taf[46:].split()
+    # Return TAF in format needed for verification
+    return ver_taf
 
 
 def update_html(date):

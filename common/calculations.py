@@ -76,6 +76,42 @@ def diff_calc(comb):
     return diff
 
 
+def get_cld(cld_cat, rules):
+    """
+    Returns suitable cloud value based on cloud category.
+
+    Args:
+        cld_cat (float): Cloud base category
+        rules (str): TAF rules for airport (defence, civil or offshore)
+    Return:
+        cld_3 (int): >= 3 okta cloud base
+        cld_5 (int): >= 5 okta cloud base
+    """
+    all_cld_dicts = {
+        'defence': {7.: [3000, 5000], 6.: [2000, 2000], 5.: [1200, 1200], 
+                    4.: [600, 600], 3.: [400, 400], 2.: 1200, 1.: 500},
+        'offshore': {7.: [5000, 5000], 6.: [4000, 5000], 5.: [3000, 3000], 
+                     4.: [1400, 1400], 3.: [900, 900], 2.: [600, 600], 
+                     1.: [300, 300], 0.: [100, 100]},
+        'civil': {7.: [5000, 5000], 6.: [4000, 5000], 5.: [3000, 3000], 
+                  4.: [1400, 1400], 3.: [800, 800], 2.: [400, 400], 
+                  1.: [100, 100]}
+    }
+
+    # Get cloud dictionary for rules
+    cld_dict = all_cld_dicts.get(rules, {})
+
+    # Get cloud value, ensuring it is within range of dictionary
+    if cld_cat > max(cld_dict):
+        cld_3, cld_5 = cld_dict.get(max(cld_dict))
+    elif cld_cat < min(cld_dict):
+        cld_3, cld_5 = cld_dict.get(min(cld_dict))
+    else:
+        cld_3, cld_5 = cld_dict.get(cld_cat)
+    
+    return cld_3, cld_5
+
+
 def get_cld_cat(cld_3, cld_5, rules):
     """
     Determines cloud base TAF category based on cloud values.
@@ -336,6 +372,40 @@ def get_rate(sig_wx, number=False):
     rate = rate_str_int[number]
 
     return rate
+
+
+def get_vis(vis_cat, rules):
+    """
+    Returns suitable visibility value based on visibility category.
+
+    Args:
+        vis_cat (float): Visibility category
+        rules (str): TAF rules for airport (defence, civil or offshore)
+    Return:
+        vis (int): Visibility value
+    """
+    # Define dictionary for all TAF rules
+    all_vis_dicts = {
+        'defence': {7.0: 9999, 6.0: 7000, 5.0: 4000, 4.0: 3000, 3.0: 2000, 
+                    2.0: 1200, 1.0: 500},
+        'offshore': {8.0: 9999, 7.0: 8000, 6.0: 6000, 5.0: 4000, 4.0: 2000, 
+                     3.0: 1200, 2.0: 500, 1.0: 300},
+        'civil': {6.0: 9999, 5.0: 7000, 4.0: 3000, 3.0: 1200, 2.0: 500, 
+                  1.0: 300}
+    }
+
+    # Get visibility dictionary for rules
+    vis_dict = all_vis_dicts.get(rules, {})
+
+    # Get visibility value, ensuring it is within range of dictionary
+    if vis_cat > max(vis_dict):
+        vis = vis_dict.get(max(vis_dict))
+    elif vis_cat < min(vis_dict):
+        vis = vis_dict.get(min(vis_dict))
+    else:
+        vis = vis_dict.get(vis_cat)
+
+    return vis
 
 
 def get_vis_cat(vis, sig_wx, rules):

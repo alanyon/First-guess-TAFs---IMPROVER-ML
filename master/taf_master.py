@@ -63,8 +63,9 @@ def main():
         if site_df.empty:
             continue
 
-        # Generate TAF
-        taf = ge.taf_gen(site_df)
+        # Generate TAF and change to format needed for bust labels
+        ver_taf = ge.taf_gen(site_df)
+        taf = ver_taf[46:].split()
 
         # Get label for TAF based on whether it would have gone bust
         bust_labels = vb.get_bust_labels(taf, site_info)
@@ -73,7 +74,7 @@ def main():
             continue
 
         # Organise dataframe for use in ml training
-        ml_df = ds.get_ml_df(site_df, bust_labels)
+        ml_df = ds.get_ml_df(site_df, bust_labels=bust_labels)
 
         # Define pickle file path
         icao_pickle = f'{VER_DIR}/pickles/pickle_{site_info["icao"]}'
