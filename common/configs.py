@@ -107,15 +107,15 @@ BUST_COLS = ['wind_bust_label', 'dir_bust_label', 'vis_bust_label',
 # ML constants
 PARAM_COLS = [
     'precip_rate_30.0', 'precip_rate_40.0', 'precip_rate_50.0', 
-    'precip_rate_60.0', 'precip_rate_70.0', 'cld_3_30.0', 'cld_3_40.0',
-    'cld_3_50.0', 'cld_3_60.0', 'cld_3_70.0', 'wind_dir_30.0', 'wind_dir_40.0', 
+    'precip_rate_60.0', 'precip_rate_70.0', 'wind_dir_30.0', 'wind_dir_40.0', 
     'wind_dir_50.0', 'wind_dir_60.0', 'wind_dir_70.0', 'temp_30.0', 
     'temp_40.0', 'temp_50.0', 'temp_60.0', 'temp_70.0',  
-    'vis_30.0', 'vis_40.0', 'vis_50.0', 'vis_60.0', 'vis_70.0', 'cld_5_30.0', 
-    'cld_5_40.0', 'cld_5_50.0', 'cld_5_60.0', 'cld_5_70.0', 'wind_mean_30.0', 
     'wind_mean_40.0', 'wind_mean_50.0', 'wind_mean_60.0', 'wind_mean_70.0', 
     'wind_gust_30.0', 'wind_gust_40.0', 'wind_gust_50.0', 'wind_gust_60.0', 
-    'wind_gust_70.0', 'year', 'month', 'day', 'hour', 'lead'
+    'wind_gust_70.0', 'month', 'day', 'hour', 'lead', 'vis_cat_30.0',
+    'vis_cat_40.0', 'vis_cat_50.0', 'vis_cat_60.0', 'vis_cat_70.0', 
+    'cld_cat_30.0', 'cld_cat_40.0', 'cld_cat_50.0', 'cld_cat_60.0', 
+    'cld_cat_70.0'
 ]
 ALL_BUST_COLS = ['wind_bust_label', 'dir_bust_label', 'vis_bust_label',
                  'cld_bust_label', 'any_bust', 'bust_class']

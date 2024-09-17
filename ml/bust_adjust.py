@@ -26,6 +26,9 @@ import generate.generate_taf as ge
 # Import environment variables
 OUTPUT_DIR = os.environ['OUTPUT_DIR']
 
+# Turn off pandas 'chained' warning
+pd.options.mode.chained_assignment = None
+
 
 def adjust_vis_cld(site_df, row, param, perc):
     """
@@ -222,7 +225,7 @@ def pred_adjust(site_df, tdf, clf_models, icao):
     return site_df
 
 
-def update_taf(tdf, site_df, clf_models, icao):
+def update_taf(tdf, site_df, clf_models):
     """
     Uses classifier models to predict bust labels, adjusts BestData
     based on these labels, then re-writes TAF.
@@ -234,9 +237,9 @@ def update_taf(tdf, site_df, clf_models, icao):
         icao (str): ICAO airport identifier
     Returns:
         None
-    """        
-    # Turn off pandas 'chained' warning
-    pd.options.mode.chained_assignment = None
+    """ 
+    # Get ICAO code       
+    icao = site_data.attrs['icao']
 
     # Generate TAF using old data and write to text file
     old_taf = ge.taf_gen(site_df)

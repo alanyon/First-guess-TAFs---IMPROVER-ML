@@ -130,6 +130,9 @@ def main():
         # Predict bust/no bust, then each bust type
         predict_btypes(test_df, clf_models, plot_dir)
 
+        print('Finished')
+        exit()
+
         # Use classifiers to predict bust labels and re-write TAFs
         for (tdf, site_df) in testing_data:
             ba.update_taf(tdf, site_df, clf_models, icao)
@@ -309,11 +312,11 @@ def get_model(X_train, y_train, X_test, y_test, clf_str, plot_dir, lab_dict):
     # First, train and test model with default hyperparameters
     default_model = RandomForestClassifier()
 
-    # rfe = RFECV(default_model)
-    # rfe.fit(X_train, y_train)
-    # selected_features = np.array(co.PARAM_COLS)[rfe.get_support()]
+    # model = RFECV(default_model)
+    # model.fit(X_train, y_train)
+    # selected_features = np.array(co.PARAM_COLS)[model.get_support()]
+    # y_pred = model.predict(X_test)
     # print(f'\nSelected features: {selected_features}')
-    # exit()
 
     default_model.fit(X_train, y_train)
     y_pred_default = default_model.predict(X_test)
@@ -372,6 +375,10 @@ def get_model(X_train, y_train, X_test, y_test, clf_str, plot_dir, lab_dict):
         print('\nDefault hypers best')
         model = default_model
         y_pred = y_pred_default
+
+    # ###TESTING
+    # model = default_model
+    # y_pred = y_pred_default
 
     # Print features in order of importance if required
     imp_feats = pd.DataFrame(zip(model.feature_names_in_,
