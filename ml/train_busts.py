@@ -251,30 +251,12 @@ def get_xy(t_data):
     # Concatenate dataframes in list
     tdf = pd.concat([tlist[0] for tlist in t_data], ignore_index=True)
 
-    # Get just busts subsets for each bust type
-    Xs, all_ys = {}, {}
-    for bust_col in co.BUST_COLS:
-
-        # Subset with just busts for parameter
-        just_busts = tdf[tdf[bust_col] != 'no_bust']
-
-        # Separate into X/y
-        X = just_busts[co.PARAM_COLS]
-        X = X.apply(pd.to_numeric)
-        all_y = just_busts[co.BUST_COLS]
-
-        # Add to dictionaries
-        Xs[bust_col] = X
-        all_ys[bust_col] = all_y
-
     # Also need the whole dataset for any bust models
     X = tdf[co.PARAM_COLS]
     X = X.apply(pd.to_numeric)
     all_y = tdf[co.BUST_COLS]
-    Xs['all'] = X
-    all_ys['all'] = all_y
 
-    return Xs, all_ys
+    return X, all_y
 
 
 def get_model(X_train, y_train, X_test, y_test, clf_str, plot_dir, lab_dict):
@@ -633,10 +615,10 @@ def split_data(icao_data):
     train_data, test_data = train_test_split(icao_data, test_size=0.2)
 
     # Concatenate dataframes in each dataset
-    X_trains, all_y_trains = get_xy(train_data)
-    X_tests, all_y_tests = get_xy(test_data)
+    X_train, all_y_train = get_xy(train_data)
+    X_test, all_y_test = get_xy(test_data)
 
-    return X_trains, all_y_trains, X_tests, all_y_tests, test_data
+    return X_train, all_y_train, X_test, all_y_test, test_data
 
 
 def try_models(X_train, y_train, X_test, y_test, plot_dir, lab_dict, m_scores,
