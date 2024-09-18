@@ -83,19 +83,19 @@ def main():
             taf_data = unpickler.load()
 
         # Split data into train/test and oversample using SMOTE
-        (X_train, y_train, X_test, y_test, 
-         all_y_test, lab_dict, testing_data) = split_data(taf_data)
+        (X_train, all_y_train, X_test, all_y_test, 
+         lab_dict, testing_data) = split_data(taf_data)
 
-        # Try different classifiers on any bust model
-        m_scores, m_times = try_models(X_train, y_train, X_test, y_test, 
-                                       plot_dir, lab_dict, m_scores, m_times)       
+        # # Try different classifiers on any bust model
+        # m_scores, m_times = try_models(X_train, y_train, X_test, y_test, 
+        #                                plot_dir, lab_dict, m_scores, m_times)       
 
         # To collect classifier models in
         clf_models = {}
 
         # Get model to predict bust/no bust
         clf_models, test_df = get_clf_binary(
-            clf_models, X_train, y_train, X_test, y_test, all_y_test, lab_dict,
+            clf_models, X_train, all_y_train, X_test, all_y_test, lab_dict,
             plot_dir
         )
 
@@ -110,11 +110,14 @@ def main():
         #     testing_data, test_df, clf_models = unpickler.load()
         # # TESTING ######################################
 
-        # Subset with just rows where busts have occurred
-        just_busts = test_df[test_df['any_bust'] == 'bust']
+        # Subset data with just rows where busts have occurred
+        train_df = pd.concat([X_train, all_y_train], axis=1)
+        train_just_busts = train_df[train_df['any_bust'] == 'bust']
+        test_just_busts = test_df[test_df['any_bust'] == 'bust']
  
         # Get models to predict type of bust, given bust
-        clf_models = get_clf_labels(clf_models, just_busts, plot_dir)
+        clf_models = get_clf_labels(clf_models, train_just_busts, 
+                                    test_just_busts, plot_dir)
     
         # Pickle/unpickle files including bust label classifier models
         bl_data = [testing_data, test_df, clf_models]
@@ -153,7 +156,7 @@ def main():
     plot_model_times(m_times)   
 
 
-def get_clf_binary(clf_models, X_train, y_train, X_test, y_test, all_y_test, 
+def get_clf_binary(clf_models, X_train, all_y_train, X_test, all_y_test, 
                    lab_dict, plot_dir):
     """
     Creates required binary classifier (bust/no bust).
@@ -172,6 +175,8 @@ def get_clf_binary(clf_models, X_train, y_train, X_test, y_test, all_y_test,
         test_df (pandas.DataFrame): Testing data
     """
     # Train model, optimising hyperparameters
+    y_train = all_y_train['bust_class']
+    y_test = all_y_test['bust_class']
     model, y_pred, pred_labels = get_model(X_train, y_train, X_test, y_test, 
                                            'any_bust', plot_dir, lab_dict)
 
@@ -187,7 +192,7 @@ def get_clf_binary(clf_models, X_train, y_train, X_test, y_test, all_y_test,
     return clf_models, test_df
 
 
-def get_clf_labels(clf_models, tdf, plot_dir):
+def get_clf_labels(clf_models, train_df, test_df, plot_dir):
     """
     Creates classifier for bust labels (e.g. wind too low, wind too
     high, etc).
@@ -200,29 +205,29 @@ def get_clf_labels(clf_models, tdf, plot_dir):
         clf_models (dict): Classifier dictionary
     """
     # Use all columns except bust_labels/classes for X
-    X = tdf[co.PARAM_COLS]
-    X = X.apply(pd.to_numeric)
+    X_train = train_df[co.PARAM_COLS]
+    y_train_all = train_df[co.ALL_BUST_COLS]
+    X_test = test_df[co.PARAM_COLS]
+    y_test_all = test_df[co.ALL_BUST_COLS]
 
     # Create classifier for each bust type
     for bust_type in co.BUST_COLS:
 
         # Create columns of class integers based on bust labels
-        labels = list(pd.unique(tdf[bust_type]))
+        labels = list(pd.unique(y_train_all[bust_type]))
         if 'no_bust' in labels:
             labels.remove('no_bust')
         lab_dict = dict({'no_bust': 0},
                         **{label: ind + 1 for ind, label in enumerate(labels)})
-        tdf['bust_class'] = tdf[bust_type].map(lab_dict)
 
-        # Ensure enough data for each label
-        if any(len(tdf[tdf[bust_type] == label]) < 4 for label in lab_dict):
-            clf_models[bust_type.split('_')[0]] = None
-            continue
+        # Get integer classes for training and testing
+        y_train = y_train_all[bust_type].map(lab_dict)
+        y_test = y_test_all[bust_type].map(lab_dict)
 
-        # Get training and testing sets
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, tdf['bust_class'], stratify=tdf['bust_class'], test_size=0.2
-        )
+        # # Ensure enough data for each label
+        # if any(len(tdf[tdf[bust_type] == label]) < 4 for label in lab_dict):
+        #     clf_models[bust_type.split('_')[0]] = None
+        #     continue
 
         # Train model, testing for parameters, etc, if required
         model, _, _ = get_model(X_train, y_train, X_test, y_test, 
@@ -289,6 +294,10 @@ def get_model(X_train, y_train, X_test, y_test, clf_str, plot_dir, lab_dict):
         y_pred (pandas.DataFrame): Predicted classes
         pred_labels (pandas.DataFrame): Predicted labels
     """
+    # Oversample minority class using SMOTE
+    smo = SMOTE(random_state=8)
+    X_train, y_train = smo.fit_resample(X_train, y_train)
+
     # Define hyperparameters to test
     params = {
         'n_estimators': [50, 100, 200, 400, 800],
@@ -322,87 +331,87 @@ def get_model(X_train, y_train, X_test, y_test, clf_str, plot_dir, lab_dict):
     y_pred_default = default_model.predict(X_test)
     default_score = score(y_test, y_pred_default)
 
-    # Get the number of samples in the original datasets
-    num_samples = len(X_train)
+    # # Get the number of samples in the original datasets
+    # num_samples = len(X_train)
 
-    # Subset data if too large
-    if num_samples > 100:
+    # # Subset data if too large
+    # if num_samples > 100:
         
-        # Set random seed for reproducibility
-        np.random.seed(42)
+    #     # Set random seed for reproducibility
+    #     np.random.seed(42)
 
-        # Calculate the number of samples for the 10% subset
-        subset_size = int(num_samples * 0.1)
+    #     # Calculate the number of samples for the 10% subset
+    #     subset_size = int(num_samples * 0.1)
 
-        # Generate random indices for the subset
-        subset_indices = np.random.choice(num_samples, size=subset_size, 
-                                          replace=False)
+    #     # Generate random indices for the subset
+    #     subset_indices = np.random.choice(num_samples, size=subset_size, 
+    #                                       replace=False)
 
-        # Create the random 10% subsets
-        X_train_subset = X_train.iloc[subset_indices]
-        y_train_subset = y_train.iloc[subset_indices]
+    #     # Create the random 10% subsets
+    #     X_train_subset = X_train.iloc[subset_indices]
+    #     y_train_subset = y_train.iloc[subset_indices]
 
-    # Otherwise, use full dataset
-    else:
-        X_train_subset = X_train
-        y_train_subset = y_train
+    # # Otherwise, use full dataset
+    # else:
+    #     X_train_subset = X_train
+    #     y_train_subset = y_train
 
-    # Use RandomizedSearchCV to obtain best hyperparameters
-    random_search = RandomizedSearchCV(RandomForestClassifier(), 
-                                       param_distributions=params, n_jobs=8,
-                                       scoring=scoring, random_state=42,
-                                       n_iter=50)
-    random_search.fit(X_train_subset, y_train_subset)
+    # # Use RandomizedSearchCV to obtain best hyperparameters
+    # random_search = RandomizedSearchCV(RandomForestClassifier(), 
+    #                                    param_distributions=params, n_jobs=8,
+    #                                    scoring=scoring, random_state=42,
+    #                                    n_iter=50)
+    # random_search.fit(X_train_subset, y_train_subset)
 
-    # Train model using optimised hyperparameters
-    best_model = random_search.best_estimator_
-    best_model.fit(X_train, y_train)
-    y_pred_best = best_model.predict(X_test)
-    best_score = score(y_test, y_pred_best)
+    # # Train model using optimised hyperparameters
+    # best_model = random_search.best_estimator_
+    # best_model.fit(X_train, y_train)
+    # y_pred_best = best_model.predict(X_test)
+    # best_score = score(y_test, y_pred_best)
 
-    # Print scores
-    print(f'\nResults for {clf_str.replace("_", " ")} classifier\n')
-    print('Default_score', default_score)
-    print('Best_score', best_score)
+    # # Print scores
+    # print(f'\nResults for {clf_str.replace("_", " ")} classifier\n')
+    # print('Default_score', default_score)
+    # print('Best_score', best_score)
 
-    # Check optimised parameters produce better results
-    if best_score > default_score:
-        print(f'\nBest hypers: {best_model.get_params()}')
-        model = best_model
-        y_pred = y_pred_best
-    # Otherwise, use default settings
-    else:
-        print('\nDefault hypers best')
-        model = default_model
-        y_pred = y_pred_default
+    # # Check optimised parameters produce better results
+    # if best_score > default_score:
+    #     print(f'\nBest hypers: {best_model.get_params()}')
+    #     model = best_model
+    #     y_pred = y_pred_best
+    # # Otherwise, use default settings
+    # else:
+    #     print('\nDefault hypers best')
+    #     model = default_model
+    #     y_pred = y_pred_default
 
-    # ###TESTING
-    # model = default_model
-    # y_pred = y_pred_default
+    ###TESTING
+    model = default_model
+    y_pred = y_pred_default
 
-    # Print features in order of importance if required
-    imp_feats = pd.DataFrame(zip(model.feature_names_in_,
-                                 model.feature_importances_),
-                             columns=['Variable', 'Importance'])
-    imp_feats = imp_feats.sort_values('Importance', ascending=False)
-    imp_feats['Variable'] = imp_feats['Variable'].str.lower()
-    imp_feats['Variable'] = imp_feats['Variable'].apply(
-        lambda x: x.replace('_', ' ')
-    )
+    # # Print features in order of importance if required
+    # imp_feats = pd.DataFrame(zip(model.feature_names_in_,
+    #                              model.feature_importances_),
+    #                          columns=['Variable', 'Importance'])
+    # imp_feats = imp_feats.sort_values('Importance', ascending=False)
+    # imp_feats['Variable'] = imp_feats['Variable'].str.lower()
+    # imp_feats['Variable'] = imp_feats['Variable'].apply(
+    #     lambda x: x.replace('_', ' ')
+    # )
 
     # Convert predictions back to strings
     lab_dict_inv = {val: key for key, val in lab_dict.items()}
     pred_labels = np.vectorize(lab_dict_inv.get)(y_pred)
 
-    # Bar plot of importance features
-    fig, ax = plt.subplots(figsize=(10, 8))
-    sns.barplot(data=imp_feats, x='Importance', y='Variable')
-    ax.set_title('Feature Importance', fontsize=20)
-    ax.set_xlabel('Feature importance score', fontsize=18)
-    ax.set_ylabel('Features', fontsize=18)
-    plt.tight_layout()
-    fig.savefig(f'{plot_dir}/feat_imp_{clf_str}.png')
-    plt.close()
+    # # Bar plot of importance features
+    # fig, ax = plt.subplots(figsize=(10, 8))
+    # sns.barplot(data=imp_feats, x='Importance', y='Variable')
+    # ax.set_title('Feature Importance', fontsize=20)
+    # ax.set_xlabel('Feature importance score', fontsize=18)
+    # ax.set_ylabel('Features', fontsize=18)
+    # plt.tight_layout()
+    # fig.savefig(f'{plot_dir}/feat_imp_{clf_str}.png')
+    # plt.close()
 
     # Plot confusion matrix
     fname = f'{plot_dir}/cm_{clf_str}.png'
@@ -629,16 +638,7 @@ def split_data(icao_data):
     X_train, all_y_train, lab_dict = get_df(train_data, return_label_dict=True)
     X_test, all_y_test = get_df(test_data)
 
-    # Get bust classes for training and validating
-    y_train = all_y_train['bust_class']
-    y_test = all_y_test['bust_class']
-
-    # Oversample minority class using SMOTE
-    smo = SMOTE(random_state=8)
-    X_train_res, y_train_res = smo.fit_resample(X_train, y_train)
-
-    return (X_train_res, y_train_res, X_test, y_test, all_y_test, lab_dict, 
-            test_data)
+    return X_train, all_y_train, X_test, all_y_test, lab_dict, test_data
 
 
 def try_models(X_train, y_train, X_test, y_test, plot_dir, lab_dict, m_scores,
