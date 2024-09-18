@@ -6,7 +6,7 @@ Functions:
     main: Main function.
     get_clf_binary: Creates binary classifier.
     get_clf_label: Creates classifier for bust labels.
-    get_df: Concatenates dataframes.
+    get_xy: Concatenates dataframes.
     get_model: Gets optimal classifier and plots results.
     predict_btypes: Predicts bust types given busts.
     train_test: Splits data into training and testing sets.
@@ -83,78 +83,30 @@ def main():
             taf_data = unpickler.load()
 
         # Split data into train/test and oversample using SMOTE
-        (X_train, y_train, X_test, y_test, 
-         all_y_test, lab_dict, testing_data) = split_data(taf_data)
+        X_trains, all_y_trains, X_tests, all_y_tests, test_datas = split_data(
+            taf_data
+        )
 
-        # Try different classifiers on any bust model
-        m_scores, m_times = try_models(X_train, y_train, X_test, y_test, 
-                                       plot_dir, lab_dict, m_scores, m_times)       
+        # # Try different classifiers on any bust model
+        # m_scores, m_times = try_models(X_train, y_train, X_test, y_test, 
+        #                                plot_dir, lab_dict, m_scores, m_times)       
 
         # To collect classifier models in
         clf_models = {}
 
-        # Get model to predict bust/no bust
-        clf_models, test_df = get_clf_binary(
-            clf_models, X_train, y_train, X_test, y_test, all_y_test, lab_dict,
-            plot_dir
-        )
+        # Create classifier for each bust type
+        for bust_type in co.BUST_COLS:
 
-        # Pickle/unpickle any bust classifier models
-        ab_data = [testing_data, test_df, clf_models]
-        ab_fname = f'{OUTPUT_DIR}/pickles/any_bust_{icao}'
-        testing_data, test_df, clf_models = pickle_unpickle(ab_data, ab_fname)
+            # Get models to predict bust/no bust and bust type
+            clf_models = get_clf(clf_models, X_trains, all_y_trains, X_tests, 
+                                 all_y_tests, plot_dir, bust_type
+            )
 
-        # # TESTING ######################################
-        # with open(f'{OUTPUT_DIR}/pickles/any_bust_{icao}', 'rb') as file_object:
-        #     unpickler = pickle.Unpickler(file_object)
-        #     testing_data, test_df, clf_models = unpickler.load()
-        # # TESTING ######################################
-
-        # Subset with just rows where busts have occurred
-        just_busts = test_df[test_df['any_bust'] == 'bust']
- 
-        # Get models to predict type of bust, given bust
-        clf_models = get_clf_labels(clf_models, just_busts, plot_dir)
-    
-        # Pickle/unpickle files including bust label classifier models
-        bl_data = [testing_data, test_df, clf_models]
-        bl_fname = f'{OUTPUT_DIR}/pickles/bust_label_{icao}'
-        testing_data, test_df, clf_models = pickle_unpickle(bl_data, bl_fname)
-
-        # # TESTING ######################################
-        # with open(f'{OUTPUT_DIR}/pickles/bust_label_{icao}', 'rb') as file_object:
-        #     unpickler = pickle.Unpickler(file_object)
-        #     testing_data, test_df, clf_models = unpickler.load()
-        # # TESTING ######################################
-
-        # Predict bust/no bust, then each bust type
-        predict_btypes(test_df, clf_models, plot_dir)
-
-        print('Finished')
-        exit()
-
-        # Use classifiers to predict bust labels and re-write TAFs
-        for (tdf, site_df) in testing_data:
-            ba.update_taf(tdf, site_df, clf_models, icao)
-
-    # Pickle/unpickle classifier model scores
-    fname = f'{OUTPUT_DIR}/pickles/model_scores_times'
-    m_data = [m_scores, m_times]
-    m_scores, m_times = pickle_unpickle(m_data, fname)
-
-    # # TESTING ######################################
-    # with open(f'{OUTPUT_DIR}/pickles/model_scores_times', 'rb') as file_object:
-    #     unpickler = pickle.Unpickler(file_object)
-    #     m_scores, m_times = unpickler.load()
-    # # TESTING ######################################
-
-    # Make some plots comparing classifiers
-    plot_model_scores(m_scores)
-    plot_model_times(m_times)   
+    print('Finished')
 
 
-def get_clf_binary(clf_models, X_train, y_train, X_test, y_test, all_y_test, 
-                   lab_dict, plot_dir):
+def get_clf(clf_models, X_trains, all_y_trains, X_tests, all_y_tests, plot_dir, 
+            bust_type):
     """
     Creates required binary classifier (bust/no bust).
 
@@ -171,71 +123,119 @@ def get_clf_binary(clf_models, X_train, y_train, X_test, y_test, all_y_test,
         clf_models (dict): Classifier dictionary
         test_df (pandas.DataFrame): Testing data
     """
-    # Train model, optimising hyperparameters
-    model, y_pred, pred_labels = get_model(X_train, y_train, X_test, y_test, 
-                                           'any_bust', plot_dir, lab_dict)
+    # Get main X and y data
+    X_train = X_trains['all']
+    all_y_train = all_y_trains['all']
+    X_test = X_tests['all']
+    all_y_test = all_y_tests['all']
 
-    # Add required columns
-    test_df = pd.concat([X_test, all_y_test], axis=1)
-    test_df['bust_predicts'] = pred_labels
-    test_df['bust_class_predicts'] = y_pred
+    # Create columns of class integers based on bust labels
+    labels = list(pd.unique(all_y_train[bust_type]))
+    if 'no_bust' in labels:
+        labels.remove('no_bust')
+    lab_dict = dict({'no_bust': 0},
+                    **{label: ind + 1 for ind, label in enumerate(labels)})
+    binary_lab_dict = {key: 0 if key == 'no_bust' else 1 for key in lab_dict}
+
+    # Train binary (bust/no bust) model and make predictions
+    y_train_bin = all_y_train[bust_type].map(binary_lab_dict)
+    y_test_bin = all_y_test[bust_type].map(binary_lab_dict)
+    new_bin_lab_dict = {'no_bust': 0, 'bust': 1}
+
+    # Oversample minority class using SMOTE
+    smo = SMOTE(random_state=8)
+    X_train, y_train_bin = smo.fit_resample(X_train, y_train_bin)
+
+    # Define classifier, train and make predictions
+    rf_any = RandomForestClassifier()
+    rf_any.fit(X_train, y_train_bin)
+    y_pred_bin = rf_any.predict(X_test)
+    score = precision_score(y_test_bin, y_pred_bin)
+
+    print(f'\nPrecision score for {bust_type}: {score}')
+
+    # Convert predictions back to strings
+    lab_dict_inv = {val: key for key, val in new_bin_lab_dict.items()}
+    pred_labels_bin = np.vectorize(lab_dict_inv.get)(y_pred_bin)
+    
+    # Plot confusion matrix
+    fname = f'{plot_dir}/cm_{bust_type}_any.png'
+    plot_confusion_matrix(new_bin_lab_dict, y_test_bin, y_pred_bin, fname)
+
+    # Get subsets where busts have occurred
+    X_train_busts = X_trains[bust_type]
+    all_y_train_busts = all_y_trains[bust_type]
+    X_test_busts = X_tests[bust_type]
+    all_y_test_busts = all_y_tests[bust_type]
+ 
+    # Create columns of class integers based on bust labels
+    labels = list(pd.unique(all_y_train_busts[bust_type]))
+    lab_dict_busts = {label: ind for ind, label in enumerate(labels)}
+
+    # Train binary bust type model
+    y_train_busts = all_y_train_busts[bust_type].map(lab_dict_busts)
+    y_test_busts = all_y_test_busts[bust_type].map(lab_dict_busts)
+
+    # Oversample minority class using SMOTE
+    smo = SMOTE(random_state=8)
+    X_train_busts, y_train_busts = smo.fit_resample(X_train_busts, 
+                                                    y_train_busts)
+
+    # Define classifier, train and make predictions
+    rf_busts = RandomForestClassifier()
+    rf_busts.fit(X_train_busts, y_train_busts)
+    y_pred_busts = rf_busts.predict(X_test_busts)
+    score = accuracy_score(y_test_busts, y_pred_busts)
+
+    print(f'\nAccuracy score for {bust_type}: {score}')
 
     # Add classifier and label dictionary to classifier dictionary
-    clf_models['all'] = model
-    clf_models['all_label_dict'] = lab_dict
+    clf_models[bust_type.split('_')[0]] = {'any_clf': rf_any,
+                                           'any_lab_dict': new_bin_lab_dict, 
+                                           'just_busts_clf': rf_busts,
+                                           'just_busts_lab_dict': lab_dict_busts}
 
-    return clf_models, test_df
+    # Plot confusion matrix
+    fname = f'{plot_dir}/cm_{bust_type}_busts.png'
+    plot_confusion_matrix(lab_dict_busts, y_test_busts, y_pred_busts, fname)
 
+    # Use both models to predict bust types
 
-def get_clf_labels(clf_models, tdf, plot_dir):
-    """
-    Creates classifier for bust labels (e.g. wind too low, wind too
-    high, etc).
+    # Subset testing data with rows where bust predicted
+    test_df = pd.concat([X_test, all_y_test], axis=1)
+    test_df['bust_predicts'] = pred_labels_bin
+    test_df['bust_class_predicts'] = y_pred_bin
+    test_bust_preds = test_df[test_df['bust_predicts'] == 'bust']
+    X_test_bust_preds = test_bust_preds[co.PARAM_COLS]
+    all_y_test_bust_preds = test_bust_preds[co.BUST_COLS]
 
-    Args:
-        clf_models (dict): Classifier dictionary
-        tdf (pandas.DataFrame): Model data
-        plot_dir (str): Directory to save images to
-    Returns:
-        clf_models (dict): Classifier dictionary
-    """
-    # Use all columns except bust_labels/classes for X
-    X = tdf[co.PARAM_COLS]
-    X = X.apply(pd.to_numeric)
+    # Predict bust types
+    y_pred = rf_busts.predict(X_test_bust_preds)
 
-    # Create classifier for each bust type
-    for bust_type in co.BUST_COLS:
+    # Convert predictions back to strings
+    lab_dict_inv = {val: key for key, val in lab_dict_busts.items()}
+    pred_labels= np.vectorize(lab_dict_inv.get)(y_pred)
 
-        # Create columns of class integers based on bust labels
-        labels = list(pd.unique(tdf[bust_type]))
-        if 'no_bust' in labels:
-            labels.remove('no_bust')
-        lab_dict = dict({'no_bust': 0},
-                        **{label: ind + 1 for ind, label in enumerate(labels)})
-        tdf['bust_class'] = tdf[bust_type].map(lab_dict)
+    # Add new columns with label and class predictions
+    X_test_bust_preds['lab_preds'] = pred_labels
+    test_df['lab_preds'] = X_test_bust_preds['lab_preds']
+    test_df['lab_preds'].fillna('no_busts', inplace=True)
+    X_test_bust_preds['class_preds'] = y_pred
+    test_df['class_preds'] = X_test_bust_preds['class_preds']
+    test_df['class_preds'].fillna(0, inplace=True)
 
-        # Ensure enough data for each label
-        if any(len(tdf[tdf[bust_type] == label]) < 4 for label in lab_dict):
-            clf_models[bust_type.split('_')[0]] = None
-            continue
+    # Get actual and predicted bust labels for all of testing data
+    y_test_both = test_df[bust_type].map(lab_dict)
+    y_pred_both = test_df['class_preds']
 
-        # Get training and testing sets
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, tdf['bust_class'], stratify=tdf['bust_class'], test_size=0.2
-        )
-
-        # Train model, testing for parameters, etc, if required
-        model, _, _ = get_model(X_train, y_train, X_test, y_test, 
-                                bust_type, plot_dir, lab_dict)
-
-        # Add classifier and label dictionary to classifier dictionary
-        clf_models[bust_type.split('_')[0]] = model
-        clf_models[bust_type.split('_')[0] + '_label_dict'] = lab_dict
+    # Plot confusion matrix
+    fname = f'{plot_dir}/cm_{bust_type}_both.png'
+    plot_confusion_matrix(lab_dict, y_test_both, y_pred_both, fname)
 
     return clf_models
 
 
-def get_df(t_data, return_label_dict=False):
+def get_xy(t_data):
     """
     Concatenates and edits dataframes.
 
@@ -251,23 +251,30 @@ def get_df(t_data, return_label_dict=False):
     # Concatenate dataframes in list
     tdf = pd.concat([tlist[0] for tlist in t_data], ignore_index=True)
 
-    # Create columns of class integers based on bust labels
-    labels = list(pd.unique(tdf['any_bust']))
-    labels.remove('no_bust')
-    lab_dict = dict({'no_bust': 0},
-                    **{label: ind + 1 for ind, label in enumerate(labels)})
-    tdf['bust_class'] = tdf['any_bust'].map(lab_dict)
+    # Get just busts subsets for each bust type
+    Xs, all_ys = {}, {}
+    for bust_col in co.BUST_COLS:
 
-    # Use all columns except bust_labels/classes for X
+        # Subset with just busts for parameter
+        just_busts = tdf[tdf[bust_col] != 'no_bust']
+
+        # Separate into X/y
+        X = just_busts[co.PARAM_COLS]
+        X = X.apply(pd.to_numeric)
+        all_y = just_busts[co.BUST_COLS]
+
+        # Add to dictionaries
+        Xs[bust_col] = X
+        all_ys[bust_col] = all_y
+
+    # Also need the whole dataset for any bust models
     X = tdf[co.PARAM_COLS]
     X = X.apply(pd.to_numeric)
+    all_y = tdf[co.BUST_COLS]
+    Xs['all'] = X
+    all_ys['all'] = all_y
 
-    # Use bust classes (0, 1...) for y, but need all bust info for later
-    all_y = tdf[co.ALL_BUST_COLS]
-
-    if return_label_dict:
-        return X, all_y, lab_dict
-    return X, all_y
+    return Xs, all_ys
 
 
 def get_model(X_train, y_train, X_test, y_test, clf_str, plot_dir, lab_dict):
@@ -322,63 +329,63 @@ def get_model(X_train, y_train, X_test, y_test, clf_str, plot_dir, lab_dict):
     y_pred_default = default_model.predict(X_test)
     default_score = score(y_test, y_pred_default)
 
-    # Get the number of samples in the original datasets
-    num_samples = len(X_train)
+    # # Get the number of samples in the original datasets
+    # num_samples = len(X_train)
 
-    # Subset data if too large
-    if num_samples > 100:
+    # # Subset data if too large
+    # if num_samples > 100:
         
-        # Set random seed for reproducibility
-        np.random.seed(42)
+    #     # Set random seed for reproducibility
+    #     np.random.seed(42)
 
-        # Calculate the number of samples for the 10% subset
-        subset_size = int(num_samples * 0.1)
+    #     # Calculate the number of samples for the 10% subset
+    #     subset_size = int(num_samples * 0.1)
 
-        # Generate random indices for the subset
-        subset_indices = np.random.choice(num_samples, size=subset_size, 
-                                          replace=False)
+    #     # Generate random indices for the subset
+    #     subset_indices = np.random.choice(num_samples, size=subset_size, 
+    #                                       replace=False)
 
-        # Create the random 10% subsets
-        X_train_subset = X_train.iloc[subset_indices]
-        y_train_subset = y_train.iloc[subset_indices]
+    #     # Create the random 10% subsets
+    #     X_train_subset = X_train.iloc[subset_indices]
+    #     y_train_subset = y_train.iloc[subset_indices]
 
-    # Otherwise, use full dataset
-    else:
-        X_train_subset = X_train
-        y_train_subset = y_train
+    # # Otherwise, use full dataset
+    # else:
+    #     X_train_subset = X_train
+    #     y_train_subset = y_train
 
-    # Use RandomizedSearchCV to obtain best hyperparameters
-    random_search = RandomizedSearchCV(RandomForestClassifier(), 
-                                       param_distributions=params, n_jobs=8,
-                                       scoring=scoring, random_state=42,
-                                       n_iter=50)
-    random_search.fit(X_train_subset, y_train_subset)
+    # # Use RandomizedSearchCV to obtain best hyperparameters
+    # random_search = RandomizedSearchCV(RandomForestClassifier(), 
+    #                                    param_distributions=params, n_jobs=8,
+    #                                    scoring=scoring, random_state=42,
+    #                                    n_iter=50)
+    # random_search.fit(X_train_subset, y_train_subset)
 
-    # Train model using optimised hyperparameters
-    best_model = random_search.best_estimator_
-    best_model.fit(X_train, y_train)
-    y_pred_best = best_model.predict(X_test)
-    best_score = score(y_test, y_pred_best)
+    # # Train model using optimised hyperparameters
+    # best_model = random_search.best_estimator_
+    # best_model.fit(X_train, y_train)
+    # y_pred_best = best_model.predict(X_test)
+    # best_score = score(y_test, y_pred_best)
 
-    # Print scores
-    print(f'\nResults for {clf_str.replace("_", " ")} classifier\n')
-    print('Default_score', default_score)
-    print('Best_score', best_score)
+    # # Print scores
+    # print(f'\nResults for {clf_str.replace("_", " ")} classifier\n')
+    # print('Default_score', default_score)
+    # print('Best_score', best_score)
 
-    # Check optimised parameters produce better results
-    if best_score > default_score:
-        print(f'\nBest hypers: {best_model.get_params()}')
-        model = best_model
-        y_pred = y_pred_best
-    # Otherwise, use default settings
-    else:
-        print('\nDefault hypers best')
-        model = default_model
-        y_pred = y_pred_default
+    # # Check optimised parameters produce better results
+    # if best_score > default_score:
+    #     print(f'\nBest hypers: {best_model.get_params()}')
+    #     model = best_model
+    #     y_pred = y_pred_best
+    # # Otherwise, use default settings
+    # else:
+    #     print('\nDefault hypers best')
+    #     model = default_model
+    #     y_pred = y_pred_default
 
-    # ###TESTING
-    # model = default_model
-    # y_pred = y_pred_default
+    ###TESTING
+    model = default_model
+    y_pred = y_pred_default
 
     # Print features in order of importance if required
     imp_feats = pd.DataFrame(zip(model.feature_names_in_,
@@ -626,19 +633,10 @@ def split_data(icao_data):
     train_data, test_data = train_test_split(icao_data, test_size=0.2)
 
     # Concatenate dataframes in each dataset
-    X_train, all_y_train, lab_dict = get_df(train_data, return_label_dict=True)
-    X_test, all_y_test = get_df(test_data)
+    X_trains, all_y_trains = get_xy(train_data)
+    X_tests, all_y_tests = get_xy(test_data)
 
-    # Get bust classes for training and validating
-    y_train = all_y_train['bust_class']
-    y_test = all_y_test['bust_class']
-
-    # Oversample minority class using SMOTE
-    smo = SMOTE(random_state=8)
-    X_train_res, y_train_res = smo.fit_resample(X_train, y_train)
-
-    return (X_train_res, y_train_res, X_test, y_test, all_y_test, lab_dict, 
-            test_data)
+    return X_trains, all_y_trains, X_tests, all_y_tests, test_data
 
 
 def try_models(X_train, y_train, X_test, y_test, plot_dir, lab_dict, m_scores,

@@ -101,8 +101,7 @@ PRIORITY_DICT = {'base': 0, 'BECMG': 1, 'TEMPO': 2, 'PROB40': 3,
 
 PROB_DICT = {'TEMPO': 100, 'PROB40': 40, 'PROB40 TEMPO': 40, 'PROB30': 30,
              'PROB30 TEMPO': 30}
-BUST_COLS = ['wind_bust_label', 'dir_bust_label', 'vis_bust_label',
-             'cld_bust_label']
+BUST_COLS = ['wind_bust_label', 'vis_bust_label','cld_bust_label']
 
 # ML constants
 PARAM_COLS = [
@@ -117,8 +116,6 @@ PARAM_COLS = [
     'cld_cat_30.0', 'cld_cat_40.0', 'cld_cat_50.0', 'cld_cat_60.0', 
     'cld_cat_70.0'
 ]
-ALL_BUST_COLS = ['wind_bust_label', 'dir_bust_label', 'vis_bust_label',
-                 'cld_bust_label', 'any_bust', 'bust_class']
 ML_ICAOS = ['EGAA', 'EGAC', 'EGAE', 'EGBB', 'EGBJ', 'EGCC', 'EGCK', 'EGEC',
             'EGEO', 'EGFF', 'EGGD', 'EGGP', 'EGGW', 'EGHC', 'EGHE', 'EGHH', 
             'EGHI', 'EGHQ', 'EGKA', 'EGKB', 'EGKK', 'EGLC', 'EGLF', 'EGLL', 
