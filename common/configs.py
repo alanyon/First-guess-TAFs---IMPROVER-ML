@@ -101,28 +101,25 @@ PRIORITY_DICT = {'base': 0, 'BECMG': 1, 'TEMPO': 2, 'PROB40': 3,
 
 PROB_DICT = {'TEMPO': 100, 'PROB40': 40, 'PROB40 TEMPO': 40, 'PROB30': 30,
              'PROB30 TEMPO': 30}
-BUST_COLS = ['wind_bust_label', 'vis_bust_label','cld_bust_label']
+BUST_COLS = ['vis_bust_label','cld_bust_label']
 
 # ML constants
 PARAM_COLS = [
-    'precip_rate_30.0', 'precip_rate_40.0', 'precip_rate_50.0', 
-    'precip_rate_60.0', 'precip_rate_70.0', 'wind_dir_30.0', 'wind_dir_40.0', 
-    'wind_dir_50.0', 'wind_dir_60.0', 'wind_dir_70.0', 'temp_30.0', 
-    'temp_40.0', 'temp_50.0', 'temp_60.0', 'temp_70.0',  
-    'wind_mean_40.0', 'wind_mean_50.0', 'wind_mean_60.0', 'wind_mean_70.0', 
-    'wind_gust_30.0', 'wind_gust_40.0', 'wind_gust_50.0', 'wind_gust_60.0', 
-    'wind_gust_70.0', 'month', 'day', 'hour', 'lead', 'vis_cat_30.0',
-    'vis_cat_40.0', 'vis_cat_50.0', 'vis_cat_60.0', 'vis_cat_70.0', 
-    'cld_cat_30.0', 'cld_cat_40.0', 'cld_cat_50.0', 'cld_cat_60.0', 
-    'cld_cat_70.0'
+    'precip_rate_30.0', 'precip_rate_50.0', 'precip_rate_70.0', 
+    'wind_dir_30.0', 'wind_dir_50.0', 'wind_dir_70.0', 'temp_30.0', 
+    'temp_50.0', 'temp_70.0', 'wind_mean_30.0', 'wind_mean_50.0', 
+    'wind_mean_70.0', 'wind_gust_30.0', 'wind_gust_50.0', 'wind_gust_70.0', 
+    'month', 'day', 'hour', 'lead', 'vis_cat_30.0', 'vis_cat_50.0', 
+    'vis_cat_70.0', 'cld_cat_30.0', 'cld_cat_50.0', 'cld_cat_70.0'
 ]
-ML_ICAOS = ['EGAA', 'EGAC', 'EGAE', 'EGBB', 'EGBJ', 'EGCC', 'EGCK', 'EGEC',
-            'EGEO', 'EGFF', 'EGGD', 'EGGP', 'EGGW', 'EGHC', 'EGHE', 'EGHH', 
-            'EGHI', 'EGHQ', 'EGKA', 'EGKB', 'EGKK', 'EGLC', 'EGLF', 'EGLL', 
-            'EGMC', 'EGMD', 'EGNH', 'EGNJ', 'EGNM', 'EGNO', 'EGNR', 'EGNT',
-            'EGNV', 'EGNX', 'EGPA', 'EGPB', 'EGPC', 'EGPD', 'EGPE', 'EGPF', 
-            'EGPH', 'EGPI', 'EGPK', 'EGPL', 'EGPN', 'EGPO', 'EGPU', 'EGSC',
-            'EGSH', 'EGSS', 'EGSY', 'EGTC', 'EGTE', 'EGTK',]
+ML_ICAOS = [
+    'EGAA', 'EGAC', 'EGAE', 'EGBB', 'EGBJ', 'EGCC', 'EGCK', 'EGEC', 'EGEO', 
+    'EGFF', 'EGGD', 'EGGP', 'EGGW', 'EGHC', 'EGHE', 'EGHH', 'EGHI', 'EGHQ', 
+    'EGKA', 'EGKB', 'EGKK', 'EGLC', 'EGLF', 'EGLL', 'EGMC', 'EGMD', 'EGNH', 
+    'EGNJ', 'EGNM', 'EGNO', 'EGNR', 'EGNT', 'EGNV', 'EGNX', 'EGPA', 'EGPB', 
+    'EGPC', 'EGPD', 'EGPE', 'EGPF', 'EGPH', 'EGPI', 'EGPK', 'EGPL', 'EGPN', 
+    'EGPO', 'EGPU', 'EGSC', 'EGSH', 'EGSS', 'EGSY', 'EGTC', 'EGTE', 'EGTK',
+]
 NICE_LABELS = {
     'vis_decrease': 'Obs Vis Lower', 'vis_increase': 'Obs Vis Higher',
     'cld_decrease': 'Obs Cld Lower', 'cld_increase': 'Obs Cld Higher',

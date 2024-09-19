@@ -13,9 +13,10 @@ Written by Andre Lanyon.
 """
 from datetime import timedelta
 
+from dateutil.rrule import HOURLY, rrule
+
 from taf_monitor.checking import CheckTafThread
 from taf_monitor.data_retrieval import RetrieveObservations
-from dateutil.rrule import HOURLY, rrule
 from taf_monitor.time_functionality import ConstructTimeObject as ct
 
 # Accepted first guess TAFs

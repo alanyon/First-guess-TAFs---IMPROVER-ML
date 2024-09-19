@@ -1,9 +1,9 @@
 #!/bin/bash -l
-#SBATCH --qos=long
+#SBATCH --qos=normal
 #SBATCH --mem=16G
 #SBATCH --ntasks=8
 #SBATCH --output=/home/h04/alanyon/first_guess_TAFs/improver_ml/ml.out
-#SBATCH --time=4320
+#SBATCH --time=300
 #SBATCH --error=/home/h04/alanyon/first_guess_TAFs/improver_ml/ml.err
 
 # Data directories
