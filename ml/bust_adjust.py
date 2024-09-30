@@ -30,7 +30,7 @@ OUTPUT_DIR = os.environ['OUTPUT_DIR']
 pd.options.mode.chained_assignment = None
 
 
-def adjust_vis_cld(site_df, row, param, perc):
+def adjust_vis_cld(site_df, row, param):
     """
     Changes vis or cloud data based on bust labels.
 
@@ -46,43 +46,55 @@ def adjust_vis_cld(site_df, row, param, perc):
     rules = site_df.attrs['rules']
 
     # Get bust label column name from parameter
-    col = f'{param}_pred_labels'
+    pred_col = f'{param}_pred_labels'
 
     # For no bust predicted, do not adjust anything
-    if row[col] == 'no_bust':
+    if row[pred_col] == 'no_bust':
         return site_df
 
-    # Get df at valid time and percentile
-    perc_time_df = site_df.loc[(site_df['percentile'] == perc)
-                                & (site_df['time'] == row['vdt'])]
+    # Get old TAF categories for each percentile
+    old_cats = []
+    for perc in [30, 40, 50, 60, 70]:
 
-    # Get old TAF category
-    old_cat = perc_time_df[f'{param}_cat'].values[0]
+        # Get df at valid time and percentile
+        perc_time_df = site_df.loc[(site_df['percentile'] == perc)
+                                    & (site_df['time'] == row['vdt'])]
 
-    # If current category is low (i.e. low cloud/fog), do not adjust
-    if old_cat < 4:
-        return site_df
+        # Get old TAF category
+        old_cat = perc_time_df[f'{param}_cat'].values[0]
 
-    # If increased bust, increase to next category up
-    if row[col] == f'{param}_increase':
-        new_cat = float(int(old_cat + 1))
+        # Do not adjust any data if any of the old categories are low 
+        # (i.e. low cloud/fog)
+        if old_cat < 3:
+            return site_df
 
-    # If decreased bust, decrease to next category down
-    elif row[col] == f'{param}_decrease':
-        new_cat = float(int(old_cat - 1))
+        # Append old category to list
+        old_cats.append(old_cat)
 
-    # Get new value(s) and update det_df
-    if param == 'vis':
-        new_vis = ca.get_vis(new_cat, rules)
-        for col, val in zip(['vis', 'vis_cat'], [new_vis, new_cat]):
-            site_df.loc[(site_df['percentile'] == perc)
-                        & (site_df['time'] == row['vdt']), col] = val
-    elif param == 'cld':
-        new_cld_3, new_cld_5 = ca.get_cld(new_cat, rules)
-        for col, val in zip(['cld_3', 'cld_5', 'cld_cat'],
-                            [new_cld_3, new_cld_5, new_cat]):
-            site_df.loc[(site_df['percentile'] == perc)
-                        & (site_df['time'] == row['vdt']), col] = val
+    # If not already returned, loop through percentiles again and adjust
+    # data based on bust label
+    for perc, old_cat in zip([30, 40, 50, 60, 70], old_cats):
+
+        # If increased bust, increase to next category up
+        if row[pred_col] == f'{param}_increase':
+            new_cat = float(int(old_cat + 1))
+
+        # If decreased bust, decrease to next category down
+        elif row[pred_col] == f'{param}_decrease':
+            new_cat = float(int(old_cat - 1))
+
+        # Get new value(s) and update det_df
+        if param == 'vis':
+            new_vis = ca.get_vis(new_cat, rules)
+            for col, val in zip(['vis', 'vis_cat'], [new_vis, new_cat]):
+                site_df.loc[(site_df['percentile'] == perc)
+                            & (site_df['time'] == row['vdt']), col] = val
+        elif param == 'cld':
+            new_cld_3, new_cld_5 = ca.get_cld(new_cat, rules)
+            for col, val in zip(['cld_3', 'cld_5', 'cld_cat'],
+                                [new_cld_3, new_cld_5, new_cat]):
+                site_df.loc[(site_df['percentile'] == perc)
+                            & (site_df['time'] == row['vdt']), col] = val
 
     return site_df
 
@@ -99,7 +111,7 @@ def dt_calc(row):
     return datetime(row['year'], row['month'], row['day'], row['hour'])
 
 
-def get_labels(X, clf_models, wx_type, clf_type):
+def get_labels(X, clf_models, wx_type, c_name):
     """
     Converts predicted integer classes to string labels.
 
@@ -112,22 +124,31 @@ def get_labels(X, clf_models, wx_type, clf_type):
         pred_labels (np.ndarray): Array of predicted labels
     """
     # If no classifier available, return all no busts
-    if clf_models[f'{wx_type}_{clf_type}'] is None:
+    if clf_models[f'{wx_type}_{c_name}'] is None:
         pred_labels = np.array(['no_bust'] * len(X))
         return pred_labels
 
     # Predict label classes (0, 1, etc)
-    y_pred = clf_models[f'{wx_type}_{clf_type}'].predict(X)
+    y_pred = clf_models[f'{wx_type}_{c_name}'].predict(X)
+
+    # # If scores are low, set to no bust
+    # label_dict = clf_models[f'{wx_type}_{c_name}_label_dict']
+    # lab_dict_inv = {val: key for key, val in label_dict.items()}
+
+    # # Do no use prediction if precision is less than half
+    # for label, score in clf_models[f'{wx_type}_{c_name}_scores'].items():
+    #     if score <= 0.5:
+    #         y_pred[y_pred == label_dict[label]] = 0
 
     # Convert class integers to labels using label dictionary
-    label_dict = clf_models[f'{wx_type}_{clf_type}_label_dict']
+    label_dict = clf_models[f'{wx_type}_{c_name}_label_dict']
     lab_dict_inv = {val: key for key, val in label_dict.items()}
     pred_labels = np.vectorize(lab_dict_inv.get)(y_pred)
 
     return pred_labels
 
 
-def pred_adjust(site_df, tdf, clf_models, icao, clf_type):
+def pred_adjust(site_df, tdf, clf_models, icao, c_name):
     """
     Predict busts and adjustmodel data based on these predictions
 
@@ -136,7 +157,7 @@ def pred_adjust(site_df, tdf, clf_models, icao, clf_type):
         tdf (pandas.DataFrame): Model data
         clf_models (dict): Classifier models
         icao (str): ICAO airport identifier
-        clf_type (str): Classifier type
+        c_name (str): Classifier type
     Returns:
         site_df (pandas.DataFrame): Adjusted site model data
     """
@@ -151,7 +172,7 @@ def pred_adjust(site_df, tdf, clf_models, icao, clf_type):
     for wx_type in ['vis', 'cld']:
 
         # Predict wx type bust labels
-        pred_labels = get_labels(X, clf_models, wx_type, clf_type)
+        pred_labels = get_labels(X, clf_models, wx_type, c_name)
 
         # Add labels to bust preds dataframe
         bust_preds[f'{wx_type}_pred_labels'] = pred_labels
@@ -160,9 +181,8 @@ def pred_adjust(site_df, tdf, clf_models, icao, clf_type):
     for _, row in bust_preds.iterrows():
 
         # Change data for each percentile and each parameter
-        for perc, param in itertools.product([30, 40, 50, 60, 70],
-                                             ['vis', 'cld']):
-            site_df = adjust_vis_cld(site_df, row, param, perc)
+        for param in ['vis', 'cld']:
+            site_df = adjust_vis_cld(site_df, row, param)
 
     return site_df
 
@@ -183,23 +203,28 @@ def update_taf(tdf, site_df, clf_models, clf_type):
     # Get ICAO code
     icao = site_df.attrs['icao']
 
+    # Simplified classifier name
+    c_name = clf_type.replace(' ', '_').lower()
+
     # Generate TAF using old data and write to text file
-    old_taf = ge.taf_gen(site_df)
-    old_txt_file = f'{OUTPUT_DIR}/tafs/{icao}_old.txt'
-    with open(old_txt_file, 'a', encoding='utf-8') as o_file:
-        o_file.write(old_taf)
+    if c_name == 'xgboost':
+        old_taf = ge.taf_gen(site_df)
+        old_txt_file = f'{OUTPUT_DIR}/tafs/{icao}_old.txt'
+        with open(old_txt_file, 'a', encoding='utf-8') as o_file:
+            o_file.write(old_taf)
 
     # Adjust data 5 times to allow for up to 5 TAF group adjustments
+    # for ind in range(5):
     for ind in range(5):
 
         # Adjust model data based on predicted bust labels
-        site_df = pred_adjust(site_df, tdf, clf_models, icao, clf_type)
+        site_df = pred_adjust(site_df, tdf, clf_models, icao, c_name)
 
         # Update ml dataframe
         tdf = ds.get_ml_df(site_df)
 
     # Generate new TAF and write to text file
     new_taf = ge.taf_gen(site_df)
-    new_txt_file = f'{OUTPUT_DIR}/tafs/{icao}_new.txt'
+    new_txt_file = f'{OUTPUT_DIR}/tafs/{icao}_{c_name}_new.txt'
     with open(new_txt_file, 'a', encoding='utf-8') as n_file:
         n_file.write(new_taf)

@@ -5,7 +5,6 @@ generated TAFs will go bust.
 Functions:
     main: Main function.
     get_clf: Creates classifier to predict bust labels.
-    get_clf_label: Creates classifier for bust labels.
     get_xy: Concatenates dataframes and separates into X/y.
     pickle_unpickle: Pickles and unpickles data.
     plot_confusion_matrix: Plots confusion matrix.
@@ -16,6 +15,8 @@ Functions:
 Written by Andre Lanyon
 """
 import os
+import numpy as np
+from numpy import sort
 import pickle
 import time
 
@@ -27,9 +28,18 @@ from imblearn.combine import SMOTETomek
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.metrics import (confusion_matrix, f1_score, precision_score,
                              recall_score)
+from sklearn.feature_selection import SelectFromModel
 from sklearn.model_selection import RandomizedSearchCV, train_test_split
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.preprocessing import StandardScaler
+from skopt.space import Real, Integer
+from skopt.utils import use_named_args
+from skopt import gp_minimize, dummy_minimize, BayesSearchCV
+from skopt.plots import plot_convergence
+from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import StratifiedKFold
 from xgboost import XGBClassifier
+import warnings
 
 import common.configs as co
 import ml.bust_adjust as ba
@@ -38,17 +48,17 @@ import ml.bust_adjust as ba
 OUTPUT_DIR = os.environ['OUTPUT_DIR']
 
 # Other constants
-SCORES = {'F1 score': f1_score,
-          'Recall': recall_score, 'Precision': precision_score}
-CLASSIFIERS = {
-    'Random Forest': RandomForestClassifier(random_state=42),
-    'XGBoost': XGBClassifier(random_state=42),
-    'Decision Tree': DecisionTreeClassifier(random_state=42),
-    'Gradient Boosting': GradientBoostingClassifier(random_state=42)
-    }
+SCORES = {'F1 score': f1_score, 'Recall': recall_score, 
+          'Precision': precision_score}
+# CLASSIFIERS = ['XGBoost', 'Random Forest', 'Decision Tree', 
+#                'Gradient Boosting']
+CLASSIFIERS = ['XGBoost', 'Random Forest']
 
 # Seaborn settings
 sns.set_style('darkgrid')
+
+# Suppress FutureWarnings
+warnings.filterwarnings("ignore")
 
 
 def main():
@@ -66,9 +76,12 @@ def main():
     m_times = {'vis': {'Classifier': [], 'Time': []},
                'cld': {'Classifier': [], 'Time': []}}
 
-    # Create classifiers for each airport
-    for icao in co.ML_ICAOS:
-    # for icao in ['EGAA']:
+    # To collect best features
+    best_features = {}
+
+    # # Create classifiers for each airport
+    # for icao in co.ML_ICAOS:
+    for icao in ['EGTK']:
 
         # Unpickle data if available
         if os.path.exists(f'{OUTPUT_DIR}/pickles/clfs_data_{icao}'):
@@ -76,7 +89,7 @@ def main():
             with open(f'{OUTPUT_DIR}/pickles/clfs_data_{icao}',
                       'rb') as file_object:
                 unpickler = pickle.Unpickler(file_object)
-                test_data, clf_models, m_scores, m_times = unpickler.load()
+                test_data, clf_models = unpickler.load()
 
         # Otherwise, create classifiers
         else:
@@ -103,44 +116,220 @@ def main():
             clf_models = {}
 
             # Create classifier for each bust type
+            icao_best_features = {}
             for bust_type in co.BUST_COLS:
 
                 # Loop through all classifiers to test
-                for model_name, model in CLASSIFIERS.items():
+                for model_name in CLASSIFIERS:
 
                     # Get models to predict bust/no bust and bust type
-                    clf_models, m_scores, m_times = get_clf(
+                    clf_models, m_scores, m_times, b_features = get_clf(
                         clf_models, X_train, all_y_train, X_test, all_y_test,
-                        plot_dir, bust_type, model_name, model, m_scores,
-                        m_times
+                        plot_dir, bust_type, model_name, m_scores,m_times, 
+                        get_features=False, optimise=False, 
+                        compare_models=False
                     )
 
+                    # Update best features
+                    icao_best_features[bust_type] = b_features
+
+            # Add best features to dictionary
+            best_features[icao] = icao_best_features
+
             # Pickle/unpickle files including bust label classifier models
-            bl_data = [test_data, clf_models, m_scores, m_times]
+            bl_data = [test_data, clf_models]
             bl_fname = f'{OUTPUT_DIR}/pickles/clfs_data_{icao}'
-            test_data, clf_models, m_scores, m_times = pickle_unpickle(
-                bl_data, bl_fname
-            )
+            test_data, clf_models = pickle_unpickle(bl_data, bl_fname)
 
         # Use classifiers to predict bust labels and re-write TAFs
         for (tdf, site_df) in test_data:
-            ba.update_taf(tdf, site_df, clf_models, 'xgboost')
+            ba.update_taf(tdf, site_df, clf_models, 'XGBoost')
+            ba.update_taf(tdf, site_df, clf_models, 'Random Forest')
 
-    # Pickle/unpickle classifier model scores
-    fname = f'{OUTPUT_DIR}/pickles/model_scores_times'
-    m_data = [m_scores, m_times]
-    m_scores, m_times = pickle_unpickle(m_data, fname)
+    # # Pickle/unpickle best features
+    # fname = f'{OUTPUT_DIR}/pickles/best_features'
+    # best_features = pickle_unpickle(best_features, fname)
 
-    # Make some plots comparing classifiers
-    for param in ['vis', 'cld']:
-        plot_model_scores(m_scores[param], param)
-        plot_model_times(m_times[param], param)
+    # # Pickle/unpickle classifier model scores
+    # fname = f'{OUTPUT_DIR}/pickles/model_scores_times'
+    # m_data = [m_scores, m_times]
+    # m_scores, m_times = pickle_unpickle(m_data, fname)
+
+    # # TESTING ######################################
+    # with open(f'{OUTPUT_DIR}/pickles/model_scores_times', 'rb') as file_object:
+    #     unpickler = pickle.Unpickler(file_object)
+    #     m_scores, m_times = unpickler.load()
+    # # TESTING ######################################
+
+    # # Make some plots comparing classifiers
+    # for param in ['vis', 'cld']:
+    #     plot_model_scores(m_scores[param], param)
+    #     plot_model_times(m_times[param], param)
+
+#    # TESTING ######################################
+#     with open(f'{OUTPUT_DIR}/pickles/best_features', 'rb') as file_object:
+#         unpickler = pickle.Unpickler(file_object)
+#         best_features = unpickler.load()
+#     # TESTING ######################################
+
+#     best_features_plot(best_features, 'vis_bust_label')
+#     best_features_plot(best_features, 'cld_bust_label')
 
     print('Finished')
 
 
+def balance_data(X_train, y_train):
+    """
+    Balances data using SMOTE and Tomek links.
+
+    Args:
+        X_train (pandas.DataFrame): Training input data
+        y_train (pandas.Series): Training target data
+    Returns:
+        X_train (pandas.DataFrame): Balanced training input data
+        y_train (pandas.Series): Balanced training target data
+    """
+    # Ensure k_neighbors is smaller than the smallest class
+    class_counts = y_train.value_counts()
+    k_neighbors = min([min(class_counts) - 1, 5])
+
+    # Oversample minority class using SMOTE and clean using Tomek links
+    smt = SMOTETomek(random_state=8, smote=SMOTE(k_neighbors=k_neighbors))
+    X_train, y_train = smt.fit_resample(X_train, y_train)
+
+    return X_train, y_train
+
+
+def best_features_plot(best_features, bust_type):
+    """
+    Plots best features for bust type.
+
+    Args:
+        best_features (dict): Best features
+        bust_type (str): Bust type
+    Returns:
+        None
+    """
+    # Get all features chosen for bust type
+    b_type_features = [list(best_features[icao][bust_type]) 
+                       for icao in best_features]
+
+    # Flatten list of lists
+    all_features = [feature for sublist in b_type_features 
+                    for feature in sublist]
+
+    # Count occurrences of each feature
+    feature_counts = {feature: all_features.count(feature) 
+                      for feature in all_features}
+
+    # Calculate percentage of occasions each feature appears
+    total_occasions = len(b_type_features)
+    feature_occasions = {feature: all_features.count(feature) / total_occasions * 100 
+                         for feature in all_features}
+
+    # Sort dictionary by value
+    feature_occasions = dict(sorted(feature_occasions.items(), 
+                                    key=lambda item: item[1], reverse=True))
+
+    # Rearrange for seaborn plot
+    perc_features = {'Feature': list(feature_occasions.keys()),
+                     'Percentage': list(feature_occasions.values())}
+
+    # Add in features that weren't chosen
+    for feature in co.PARAM_COLS:
+        if feature not in perc_features['Feature']:
+            perc_features['Feature'].append(feature)
+            perc_features['Percentage'].append(0)
+
+    # Create figure and axis
+    fig, ax = plt.subplots(figsize=(9, 6))
+
+    # Plot feature importances
+    sns.barplot(data=perc_features, x='Percentage', y='Feature', ax=ax)
+
+    plt.tight_layout()
+    fig.savefig(f'{OUTPUT_DIR}/ml_plots/best_features_{bust_type}.png')
+    plt.close()
+
+
+def get_best_features(default, default_precision, X_train, X_test, y_train, 
+                      y_test, feat_fname):
+    """
+    Gets best features for classifier.
+
+    Args:
+        default (sklearn classifier): Default classifier
+        default_precision (float): Default precision score
+        X_train (pandas.DataFrame): Training input data
+        X_test (pandas.DataFrame): Testing input data
+        y_train (pandas.Series): Training target data
+        y_test (pandas.Series): Testing target data
+        feat_fname (str): File path for saving plot
+    Returns:
+        best_features (list): Best features
+    """
+    # Indices of sorted feature importances
+    sorted_idx = default.feature_importances_.argsort()
+
+    # Get sorted features
+    sorted_features = X_train.columns[sorted_idx]
+
+    # Make plot of feature importances
+    fig, ax = plt.subplots()
+    ax.barh(sorted_features, default.feature_importances_[sorted_idx])
+    ax.set_xlabel("XGBoost Feature Importance")
+    plt.tight_layout()
+    fig.savefig(feat_fname)
+    plt.close()
+
+    # Define default variables to update if necessary
+    best_features = sorted_features.copy()
+    best_precision = default_precision
+
+    # Get thresholds for feature selection and loop through them
+    thresholds = sort(default.feature_importances_)
+    for thresh in thresholds:
+
+        # select features using threshold
+        selection = SelectFromModel(default, threshold=thresh, prefit=True)
+
+        # Get subset of X_train using features
+        select_X_train = selection.transform(X_train)
+
+        # train model
+        # selection_model = XGBClassifier(eval_metric=my_precision, 
+        #                                 random_state=42)
+        selection_model = XGBClassifier(random_state=42)
+        selection_model.fit(select_X_train, y_train)
+
+        # eval model
+        select_X_test = selection.transform(X_test)
+        predictions = selection_model.predict(select_X_test)
+
+        # Print score
+        sel_precision = precision_score(y_test, predictions, labels=[1, 2],   
+                                        average='macro')
+        print(f'Thresh={thresh}, n={select_X_train.shape[1]} '
+              f'Precision={sel_precision}')
+
+        # Update best features if necessary
+        if round(sel_precision, 3) >= round(default_precision, 3):
+            best_features = sorted_features[-select_X_train.shape[1]:]
+            best_precision = sel_precision
+
+    print(f'Best features: {best_features}')
+    print(f'Best precision: {best_precision}')
+
+    # Get subset of X_train and X_test using best features
+    X_train = X_train[best_features]
+    X_test = X_test[best_features]
+
+    return best_features, X_train, X_test
+
+
 def get_clf(clf_models, X_train, all_y_train, X_test, all_y_test, plot_dir,
-            bust_type, model_name, model, m_scores, m_times):
+            bust_type, model_name, m_scores, m_times, 
+            get_features=False, optimise=False, compare_models=False):
     """
     Creates classifier to predict busts.
 
@@ -154,7 +343,6 @@ def get_clf(clf_models, X_train, all_y_train, X_test, all_y_test, plot_dir,
         plot_dir (str): Directory to save plots to
         bust_type (str): Bust type
         model_name (str): Classifier name
-        model (sklearn classifier): Classifier
         m_scores (dict): Model scores
         m_times (dict): Model processing times
     Returns:
@@ -162,55 +350,122 @@ def get_clf(clf_models, X_train, all_y_train, X_test, all_y_test, plot_dir,
         m_scores (dict): Updated model scores
         m_times (dict): Updated model processing times
     """
-    # Create columns of class integers based on bust labels
-    labels = list(pd.unique(all_y_train[bust_type]))
-    if 'no_bust' in labels:
-        labels.remove('no_bust')
-    lab_dict = dict({'no_bust': 0},
-                    **{label: ind + 1 for ind, label in enumerate(labels)})
+    # Shortened/simplified names for fnames, etc
+    mf_name = model_name.replace(' ', '_').lower()
+    bf_name = bust_type.split('_')[0]
+
+    # Get label dictionary
+    lab_dict = get_label_dict(all_y_train[bust_type])
 
     # Get class integers based on lab_dict
     y_train = all_y_train[bust_type].map(lab_dict)
     y_test = all_y_test[bust_type].map(lab_dict)
 
-    # Ensure k_neighbors is smaller than the smallest class
-    class_counts = y_train.value_counts()
-    k_neighbors = min([min(class_counts) - 1, 5])
-
     # Oversample minority class using SMOTE and clean using Tomek links
-    smt = SMOTETomek(random_state=8, smote=SMOTE(k_neighbors=k_neighbors))
-    X_train, y_train = smt.fit_resample(X_train, y_train)
+    X_train, y_train = balance_data(X_train, y_train)
 
-    # Define classifier, train and make predictions, timing it
-    start_time = time.time()
-    model.fit(X_train, y_train)
-    y_pred = model.predict(X_test)
-    end_time = time.time()
-    elapsed_time = end_time - start_time
-    print(f'\nElapsed time for {model_name}: {elapsed_time:.2f} seconds')
+    # Define default model  
+    if model_name == 'XGBoost':
+        default = XGBClassifier(eval_metric=my_precision, random_state=42)
+    elif model_name == 'Random Forest':
+        default = RandomForestClassifier(random_state=42)
+    elif model_name == 'Decision Tree':
+        default = DecisionTreeClassifier(random_state=42)
+    elif model_name == 'Gradient Boosting':
+        default = GradientBoostingClassifier(random_state=42)
 
-    # Shortened/simplified names for fnames, etc
-    mf_name = model_name.replace(' ', '_').lower()
-    bf_name = bust_type.split('_')[0]
+    # Train model and get time    
+    warnings.filterwarnings("ignore")  
+    start = time.time()
+    default.fit(X_train, y_train)
+    end = time.time()
+    elapsed = end - start
+    print(f'\nElapsed time for {model_name}: {elapsed:.2f} seconds')
 
-    # Get required scores
-    for score_name, score_func in SCORES.items():
-        m_score = score_func(y_test, y_pred, average='macro')
-        print(score_name, m_score)
-        m_scores[bf_name]['Classifier'].append(model_name)
-        m_scores[bf_name]['Evaluation Metric'].append(score_name)
-        m_scores[bf_name]['Score'].append(m_score)
+    # Get default precision score
+    default_y_pred = default.predict(X_test)
+    default_precision = precision_score(y_test, default_y_pred, labels=[1, 2], 
+                                        average='micro')
+    print('Score before optimisation:', default_precision)
 
     # Plot confusion matrix
-    fname = f'{plot_dir}/cm_{bf_name}_{mf_name}.png'
-    plot_confusion_matrix(lab_dict, y_test, y_pred, fname)
+    cm_fname = f'{plot_dir}/cm_{bf_name}_{mf_name}_default.png'
+    plot_confusion_matrix(lab_dict, y_test, default_y_pred, cm_fname)
+
+    # Collect stats for comparing models if required
+    if compare_models:
+
+        # Add time to dictionary
+        m_times[bf_name]['Classifier'].append(model_name)
+        m_times[bf_name]['Time'].append(elapsed)
+
+        # Get required scores
+        for score_name, score_func in SCORES.items():
+            m_score = score_func(y_test, default_y_pred, average='macro')
+            m_score_minorities = score_func(y_test, default_y_pred, 
+                                            labels=[1, 2], average='micro')
+            print(score_name, m_score, m_score_minorities)
+            m_scores[bf_name]['Classifier'].append(model_name)
+            m_scores[bf_name]['Evaluation Metric'].append(score_name)
+            m_scores[bf_name]['Score'].append(m_score)
+            m_scores[bf_name]['Classifier'].append(model_name)
+            min_score_name = f'{score_name} (minorities)'
+            m_scores[bf_name]['Evaluation Metric'].append(min_score_name)
+            m_scores[bf_name]['Score'].append(m_score_minorities)
+
+    # Plot feature importance and select best features
+    if get_features:
+        feat_fname = f'{plot_dir}/feature_importance_{bf_name}_{mf_name}.png'
+        best_features, X_train, X_test = get_best_features(
+            default, default_precision, X_train, X_test, y_train, y_test, 
+            feat_fname
+        )
+        feat_model = XGBClassifier(eval_metric=my_precision, random_state=42)
+        feat_model.fit(X_train, y_train)
+    else:
+        best_features = X_train.columns
+        feat_model = default
+
+    # Optimise hyperparameters, plotting convergence
+    if optimise:
+        fname = f'{plot_dir}/convergence_{bf_name}_{mf_name}.png'
+        opt_model = optimise_hypers(X_train, y_train, fname)
+    else:
+        opt_model = feat_model
+
+    # Define optimal classifier and print score
+    y_pred_opt = opt_model.predict(X_test)
+    print('Score after optimisation:', precision_score(y_test, y_pred_opt, 
+                                                       labels=[1, 2],   
+                                                       average='micro')) 
+
+    # Add individual precision scores to dictionary
+    precision_scores ={lab: precision_score(y_test, y_pred_opt, labels=[lab_no],
+                                              average='macro')
+                       for lab, lab_no in lab_dict.items()}
+
+    # Plot confusion matrix
+    fname = f'{plot_dir}/cm_{bf_name}_{mf_name}_opt.png'
+    plot_confusion_matrix(lab_dict, y_test, y_pred_opt, fname)
 
     # Add classifier to dictionary
     bf_name = bust_type.split('_')[0]
-    clf_models[f'{bf_name}_{mf_name}'] = model
+    clf_models[f'{bf_name}_{mf_name}'] = opt_model
     clf_models[f'{bf_name}_{mf_name}_label_dict'] = lab_dict
+    clf_models[f'{bf_name}_{mf_name}_scores'] = precision_scores
 
-    return clf_models, m_scores, m_times
+    return clf_models, m_scores, m_times, best_features
+
+
+def get_label_dict(bust_labels):
+
+    labels = list(pd.unique(bust_labels))
+    if 'no_bust' in labels:
+        labels.remove('no_bust')
+    lab_dict = dict({'no_bust': 0},
+                    **{label: ind + 1 for ind, label in enumerate(labels)})
+
+    return lab_dict
 
 
 def get_xy(t_data):
@@ -232,6 +487,119 @@ def get_xy(t_data):
     all_y = tdf[co.BUST_COLS]
 
     return X, all_y
+
+
+def my_precision(estimator, X, y):
+    """
+    Creates custom precision score that gives a micro average but
+    ignores the 'no bust' class, for use in hyperparameter optimisation.
+
+    Args:
+        estimator (sklearn classifier): Classifier
+        X (pandas.DataFrame): Input data
+        y (pandas.Series): Target data
+    Returns:    
+        precision_score (float): micro-averaged precision score
+    """
+    # Make predictions
+    y_pred = estimator.predict(X)
+
+    # Calculate micro-averaged precision score, ignoring the 'no bust'
+    # class (0)
+    return precision_score(y, y_pred, labels=[1, 2], average='micro')
+
+
+def optimise_hypers(X_train, y_train, fname):
+    """
+    Optimises hyperparameters for classifier.
+
+    Args:
+        X_train (pandas.DataFrame): Training input data
+        y_train (pandas.Series): Training target data
+        fname (str): File path for saving plot
+    Returns:
+        model (sklearn classifier): Optimised classifier
+    """
+    warnings.filterwarnings("ignore")
+
+    # Define default model
+    xgb = XGBClassifier(eval_metric=my_precision, random_state=42, verbosity=0)
+
+    # Hyperparameters to optimise
+    space = [Integer(4, 15, name='max_depth'),
+             Real(0.1, 0.3, "log-uniform", name='learning_rate'),
+             Integer(0, 5, name='min_child_weight'),
+             Real(0.5, 1, "log-uniform", name='subsample'),
+             Real(0.5, 1, "log-uniform", name='colsample_bytree')]
+
+    # fit_params = {
+    #     'early_stopping_rounds': 10,
+    #     'eval_metric':my_precision,
+    #     'eval_set':[(X_train, y_train)],
+    #     'verbose': False,
+    # }
+
+    # space = {
+    #     'learning_rate': (0.01, 1.0, 'log-uniform'),
+    #     'min_child_weight': (0, 10),
+    #     'max_depth': (0, 50),
+    #     'max_delta_step': (0, 20),
+    #     'subsample': (0.01, 1.0, 'uniform'),
+    #     'colsample_bytree': (0.1, 1.0, 'uniform'),
+    #     'colsample_bylevel': (0.1, 1.0, 'uniform'),
+    #     'reg_lambda': (1e-9, 1000, 'log-uniform'),
+    #     'reg_alpha': (1e-9, 1.0, 'log-uniform'),
+    #     'gamma': (1e-9, 0.5, 'log-uniform'),
+    #     'min_child_weight': (0, 5),
+    #     'n_estimators': (50, 100),
+    #     'scale_pos_weight': (1, 500, 'log-uniform')
+    # }
+
+    # Decorator to use named arguments - use micro-averaged precision as
+    # scoring function
+    @use_named_args(space)
+    def objective(**params):
+        xgb.set_params(**params)
+        return -np.mean(cross_val_score(xgb, X_train, y_train, cv=5, n_jobs=-1,
+                                        scoring=my_precision))
+
+    # Optimise hyperparameters                  
+    res_gp = gp_minimize(objective, space, n_calls=20, random_state=0)
+
+    # # Perform Bayesian optimization
+    # opt_clf = BayesSearchCV(estimator=xgb, search_spaces=space, 
+    #                         scoring=my_precision, n_iter=10, 
+    #                         fit_params=fit_params,
+    #                         cv=3, n_jobs=-1, verbose=0)
+    # opt_clf.fit(X_train, y_train)
+
+    # # Print best parameters
+    # print(f"Best parameters: {opt_clf.best_params_}")
+    # print(f"Best score: {opt_clf.best_score_}")
+
+    # Print best score and parameters
+    print(f'Best score: {res_gp.fun}')
+    print(f'Best parameters: {res_gp.x}')
+
+    # Define model with best hyperparameters
+    opt_model = XGBClassifier.set_params(
+        **dict(zip(['max_depth', 'learning_rate', 'min_child_weight', 
+                    'subsample', 'colsample_bytree'], res_gp.x))
+    )
+
+    # Train model with best hyperparameters
+    opt_model.fit(X_train, y_train)
+
+    # # Define model with best hyperparameters
+    # opt_model = XGBClassifier.set_params(bayes_search.best_params_)
+
+    # Make convergence plot
+    fig, ax = plt.subplots() 
+    plot_convergence(res_gp)
+    fig.savefig(fname)
+    plt.close()
+
+    return opt_clf
 
 
 def pickle_unpickle(p_data, file_path):
@@ -332,8 +700,8 @@ def plot_model_scores(m_scores, param):
 
     # Save and close plot
     plt.tight_layout()
-    fig.savefig(f'{OUTPUT_DIR}/ml_plots/classifier_scores_{param}.png',
-                bbox_inches = "tight")
+    fname = f'{OUTPUT_DIR}/ml_plots/model_scores/classifier_scores_{param}.png'
+    fig.savefig(fname, bbox_inches = "tight")
     plt.close()
 
 
@@ -366,8 +734,8 @@ def plot_model_times(m_times, param):
 
     # Save and close plot
     plt.tight_layout()
-    fig.savefig(f'{OUTPUT_DIR}/ml_plots/classifier_times_{param}.png',
-                bbox_inches = "tight")
+    fname = f'{OUTPUT_DIR}/ml_plots/model_scores/classifier_times_{param}.png'
+    fig.savefig(fname, bbox_inches = "tight")
     plt.close()
 
 
