@@ -425,10 +425,10 @@ def get_clf(clf_models, X_train, all_y_train, X_test, all_y_test, plot_dir,
                                                        labels=[1, 2],   
                                                        average='micro')) 
 
-    # Add individual precision scores to dictionary
-    precision_scores ={lab: precision_score(y_test, y_pred_opt, labels=[lab_no],
-                                              average='micro')
-                       for lab, lab_no in lab_dict.items()}
+    # # Add individual precision scores to dictionary
+    # precision_scores ={lab: precision_score(y_test, y_pred_opt, labels=[lab_no],
+    #                                           average='micro')
+    #                    for lab, lab_no in lab_dict.items()}
 
     # Plot confusion matrix
     fname = f'{plot_dir}/cm_{bf_name}_{mf_name}_opt.png'
@@ -438,7 +438,7 @@ def get_clf(clf_models, X_train, all_y_train, X_test, all_y_test, plot_dir,
     bf_name = bust_type.split('_')[0]
     clf_models[f'{bf_name}_{mf_name}'] = opt_model
     clf_models[f'{bf_name}_{mf_name}_label_dict'] = lab_dict
-    clf_models[f'{bf_name}_{mf_name}_scores'] = precision_scores
+    # clf_models[f'{bf_name}_{mf_name}_scores'] = precision_scores
 
     return clf_models, m_scores, m_times, best_features
 
