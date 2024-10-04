@@ -24,7 +24,6 @@ import common.calculations as ca
 import common.configs as co
 import generate.generate_taf as ge
 import ml.data_sorting as ds
-from ml.train_busts import my_precision
 
 # Import environment variables
 OUTPUT_DIR = os.environ['OUTPUT_DIR']
@@ -167,6 +166,26 @@ def get_labels(X, clf_models, wx_type, c_name):
     pred_labels = np.vectorize(lab_dict_inv.get)(y_pred)
 
     return pred_labels
+
+
+def my_precision(estimator, X, y):
+    """
+    Creates custom precision score that gives a micro average but
+    ignores the 'no bust' class, for use in hyperparameter optimisation.
+
+    Args:
+        estimator (sklearn classifier): Classifier
+        X (pandas.DataFrame): Input data
+        y (pandas.Series): Target data
+    Returns:    
+        precision_score (float): micro-averaged precision score
+    """
+    # Make predictions
+    y_pred = estimator.predict(X)
+
+    # Calculate micro-averaged precision score, ignoring the 'no bust'
+    # class (0)
+    return precision_score(y, y_pred, labels=[1, 2], average='micro')
 
 
 def pred_adjust(site_df, tdf, clf_models, icao, c_name):
