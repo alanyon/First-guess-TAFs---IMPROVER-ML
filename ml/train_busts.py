@@ -134,15 +134,9 @@ def main():
         # Add best features to dictionary
         best_features[icao] = icao_best_features
 
-        # Pickle/unpickle files including bust label classifier models
-        bl_data = [test_data, clf_models]
-        bl_fname = f'{OUTPUT_DIR}/pickles/clfs_data_{icao}'
-        test_data, clf_models = pickle_unpickle(bl_data, bl_fname)
-
-    # Use classifiers to predict bust labels and re-write TAFs
-    for (tdf, site_df) in test_data:
-        ba.update_taf(tdf, site_df, clf_models, 'XGBoost')
-        ba.update_taf(tdf, site_df, clf_models, 'Random Forest')
+        # Pickle files including bust label classifier models
+        with open(bl_fname, 'wb') as f_object:
+            pickle.dump(bl_data, f_object)
 
     # # Pickle/unpickle best features
     # fname = f'{OUTPUT_DIR}/pickles/best_features'
@@ -172,8 +166,6 @@ def main():
 
 #     best_features_plot(best_features, 'vis_bust_label')
 #     best_features_plot(best_features, 'cld_bust_label')
-
-    print('Finished')
 
 
 def balance_data(X_train, y_train):

@@ -13,6 +13,8 @@ Written by Andre Lanyon
 """
 import itertools
 import os
+import time
+import pickle
 from datetime import datetime
 
 import numpy as np
@@ -25,9 +27,25 @@ import ml.data_sorting as ds
 
 # Import environment variables
 OUTPUT_DIR = os.environ['OUTPUT_DIR']
+FAKE_DATE = os.environ['FAKE_DATE']
 
 # Turn off pandas 'chained' warning
 pd.options.mode.chained_assignment = None
+
+
+def main():
+
+    # Get icao from date icao dictionary
+    icao = co.DATE_ICAOS[FAKE_DATE]
+
+    # Unpickle classifier models
+    with open(f'{OUTPUT_DIR}/pickles/clfs_data_{icao}', 'rb') as file_object:
+        unpickler = pickle.Unpickler(file_object)
+        test_data, clf_models = unpickler.load()
+
+    # Use classifiers to predict bust labels and re-write TAFs
+    for (tdf, site_df) in test_data:
+        update_taf(tdf, site_df, clf_models, 'XGBoost')
 
 
 def adjust_vis_cld(site_df, row, param):
@@ -187,7 +205,7 @@ def pred_adjust(site_df, tdf, clf_models, icao, c_name):
     return site_df
 
 
-def update_taf(tdf, site_df, clf_models, clf_type):
+def main(tdf, site_df, clf_models, clf_type):
     """
     Uses classifier models to predict bust labels, adjusts BestData
     based on these labels, then re-writes TAF.
@@ -228,3 +246,13 @@ def update_taf(tdf, site_df, clf_models, clf_type):
     new_txt_file = f'{OUTPUT_DIR}/tafs/{icao}_{c_name}_new.txt'
     with open(new_txt_file, 'a', encoding='utf-8') as n_file:
         n_file.write(new_taf)
+
+
+if __name__ == "__main__":
+
+    # Run main function and time it
+    start_time = time.time()
+    main()
+    end_time = time.time()
+    elapsed_time = (end_time - start_time) / 60
+    print(f"Finished in {elapsed_time:.2f} minutes")
