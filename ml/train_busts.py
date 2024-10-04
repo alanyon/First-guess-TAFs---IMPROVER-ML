@@ -134,6 +134,9 @@ def main():
         # Add best features to dictionary
         best_features[icao] = icao_best_features
 
+        bl_data = [test_data, clf_models]
+        bl_fname = f'{OUTPUT_DIR}/pickles/clfs_data_{icao}'
+
         # Pickle files including bust label classifier models
         with open(bl_fname, 'wb') as f_object:
             pickle.dump(bl_data, f_object)

@@ -205,7 +205,7 @@ def pred_adjust(site_df, tdf, clf_models, icao, c_name):
     return site_df
 
 
-def main(tdf, site_df, clf_models, clf_type):
+def update_taf(tdf, site_df, clf_models, clf_type):
     """
     Uses classifier models to predict bust labels, adjusts BestData
     based on these labels, then re-writes TAF.
