@@ -46,13 +46,12 @@ import ml.bust_adjust as ba
 
 # Import environment variables
 OUTPUT_DIR = os.environ['OUTPUT_DIR']
+FAKE_DATE = os.environ['FAKE_DATE']
 
 # Other constants
 SCORES = {'F1 score': f1_score, 'Recall': recall_score, 
           'Precision': precision_score}
-# CLASSIFIERS = ['XGBoost', 'Random Forest', 'Decision Tree', 
-#                'Gradient Boosting']
-CLASSIFIERS = ['XGBoost', 'Random Forest']
+CLASSIFIERS = ['XGBoost']
 
 # Seaborn settings
 sns.set_style('darkgrid')
@@ -68,6 +67,9 @@ def main():
     # Turn off pandas 'chained' warning
     pd.options.mode.chained_assignment = None
 
+    # Get icao from date icao dictionary
+    icao = co.DATE_ICAO[FAKE_DATE]
+
     # To collect classifier times and scores
     m_scores = {
         'vis': {'Classifier': [], 'Evaluation Metric': [], 'Score': []},
@@ -79,72 +81,68 @@ def main():
     # To collect best features
     best_features = {}
 
-    # # Create classifiers for each airport
-    # for icao in co.ML_ICAOS:
-    for icao in ['EGTK']:
+    # Unpickle data if available
+    if os.path.exists(f'{OUTPUT_DIR}/pickles/clfs_data_{icao}'):
+        print(f'Unpickling data for {icao}')
+        with open(f'{OUTPUT_DIR}/pickles/clfs_data_{icao}',
+                    'rb') as file_object:
+            unpickler = pickle.Unpickler(file_object)
+            test_data, clf_models = unpickler.load()
 
-        # Unpickle data if available
-        if os.path.exists(f'{OUTPUT_DIR}/pickles/clfs_data_{icao}'):
-            print(f'Unpickling data for {icao}')
-            with open(f'{OUTPUT_DIR}/pickles/clfs_data_{icao}',
-                      'rb') as file_object:
-                unpickler = pickle.Unpickler(file_object)
-                test_data, clf_models = unpickler.load()
+    # Otherwise, create classifiers
+    else:
 
-        # Otherwise, create classifiers
-        else:
+        print(f'Training models for {icao}')
 
-            print(f'Training models for {icao}')
+        # Directory to send plots to
+        plot_dir = f'{OUTPUT_DIR}/ml_plots/{icao}'
+        if not os.path.exists(plot_dir):
+            os.makedirs(plot_dir)
 
-            # Directory to send plots to
-            plot_dir = f'{OUTPUT_DIR}/ml_plots/{icao}'
-            if not os.path.exists(plot_dir):
-                os.makedirs(plot_dir)
+        # Unpickle data
+        i_pickle = f'{OUTPUT_DIR}/pickles/pickle_{icao}'
+        with open(i_pickle, 'rb') as file_object:
+            unpickler = pickle.Unpickler(file_object)
+            taf_data = unpickler.load()
 
-            # Unpickle data
-            i_pickle = f'{OUTPUT_DIR}/pickles/pickle_{icao}'
-            with open(i_pickle, 'rb') as file_object:
-                unpickler = pickle.Unpickler(file_object)
-                taf_data = unpickler.load()
+        # Split data into train/test
+        X_train, all_y_train, X_test, all_y_test, test_data = split_data(
+            taf_data
+        )
 
-            # Split data into train/test
-            X_train, all_y_train, X_test, all_y_test, test_data = split_data(
-                taf_data
-            )
+        # To collect classifier models in
+        clf_models = {}
 
-            # To collect classifier models in
-            clf_models = {}
+        # Create classifier for each bust type
+        icao_best_features = {}
+        for bust_type in co.BUST_COLS:
 
-            # Create classifier for each bust type
-            icao_best_features = {}
-            for bust_type in co.BUST_COLS:
+            # Loop through all classifiers to test
+            for model_name in CLASSIFIERS:
 
-                # Loop through all classifiers to test
-                for model_name in CLASSIFIERS:
+                # Get models to predict bust/no bust and bust type
+                clf_models, m_scores, m_times, b_features = get_clf(
+                    clf_models, X_train, all_y_train, X_test, all_y_test,
+                    plot_dir, bust_type, model_name, m_scores,m_times, 
+                    get_features=False, optimise=True, 
+                    compare_models=False
+                )
 
-                    # Get models to predict bust/no bust and bust type
-                    clf_models, m_scores, m_times, b_features = get_clf(
-                        clf_models, X_train, all_y_train, X_test, all_y_test,
-                        plot_dir, bust_type, model_name, m_scores,m_times, 
-                        get_features=False, optimise=False, 
-                        compare_models=False
-                    )
+                # Update best features
+                icao_best_features[bust_type] = b_features
 
-                    # Update best features
-                    icao_best_features[bust_type] = b_features
+        # Add best features to dictionary
+        best_features[icao] = icao_best_features
 
-            # Add best features to dictionary
-            best_features[icao] = icao_best_features
+        # Pickle/unpickle files including bust label classifier models
+        bl_data = [test_data, clf_models]
+        bl_fname = f'{OUTPUT_DIR}/pickles/clfs_data_{icao}'
+        test_data, clf_models = pickle_unpickle(bl_data, bl_fname)
 
-            # Pickle/unpickle files including bust label classifier models
-            bl_data = [test_data, clf_models]
-            bl_fname = f'{OUTPUT_DIR}/pickles/clfs_data_{icao}'
-            test_data, clf_models = pickle_unpickle(bl_data, bl_fname)
-
-        # Use classifiers to predict bust labels and re-write TAFs
-        for (tdf, site_df) in test_data:
-            ba.update_taf(tdf, site_df, clf_models, 'XGBoost')
-            ba.update_taf(tdf, site_df, clf_models, 'Random Forest')
+    # Use classifiers to predict bust labels and re-write TAFs
+    for (tdf, site_df) in test_data:
+        ba.update_taf(tdf, site_df, clf_models, 'XGBoost')
+        ba.update_taf(tdf, site_df, clf_models, 'Random Forest')
 
     # # Pickle/unpickle best features
     # fname = f'{OUTPUT_DIR}/pickles/best_features'
@@ -297,8 +295,6 @@ def get_best_features(default, default_precision, X_train, X_test, y_train,
         select_X_train = selection.transform(X_train)
 
         # train model
-        # selection_model = XGBClassifier(eval_metric=my_precision, 
-        #                                 random_state=42)
         selection_model = XGBClassifier(random_state=42)
         selection_model.fit(select_X_train, y_train)
 
@@ -308,7 +304,7 @@ def get_best_features(default, default_precision, X_train, X_test, y_train,
 
         # Print score
         sel_precision = precision_score(y_test, predictions, labels=[1, 2],   
-                                        average='macro')
+                                        average='micro')
         print(f'Thresh={thresh}, n={select_X_train.shape[1]} '
               f'Precision={sel_precision}')
 
@@ -320,11 +316,7 @@ def get_best_features(default, default_precision, X_train, X_test, y_train,
     print(f'Best features: {best_features}')
     print(f'Best precision: {best_precision}')
 
-    # Get subset of X_train and X_test using best features
-    X_train = X_train[best_features]
-    X_test = X_test[best_features]
-
-    return best_features, X_train, X_test
+    return best_features
 
 
 def get_clf(clf_models, X_train, all_y_train, X_test, all_y_test, plot_dir,
@@ -366,7 +358,7 @@ def get_clf(clf_models, X_train, all_y_train, X_test, all_y_test, plot_dir,
 
     # Define default model  
     if model_name == 'XGBoost':
-        default = XGBClassifier(eval_metric=my_precision, random_state=42)
+        default = XGBClassifier(random_state=42)
     elif model_name == 'Random Forest':
         default = RandomForestClassifier(random_state=42)
     elif model_name == 'Decision Tree':
@@ -374,9 +366,9 @@ def get_clf(clf_models, X_train, all_y_train, X_test, all_y_test, plot_dir,
     elif model_name == 'Gradient Boosting':
         default = GradientBoostingClassifier(random_state=42)
 
-    # Train model and get time    
-    warnings.filterwarnings("ignore")  
+    # Train model and get time      
     start = time.time()
+    warnings.filterwarnings("ignore")
     default.fit(X_train, y_train)
     end = time.time()
     elapsed = end - start
@@ -416,22 +408,19 @@ def get_clf(clf_models, X_train, all_y_train, X_test, all_y_test, plot_dir,
     # Plot feature importance and select best features
     if get_features:
         feat_fname = f'{plot_dir}/feature_importance_{bf_name}_{mf_name}.png'
-        best_features, X_train, X_test = get_best_features(
+        best_features = get_best_features(
             default, default_precision, X_train, X_test, y_train, y_test, 
             feat_fname
         )
-        feat_model = XGBClassifier(eval_metric=my_precision, random_state=42)
-        feat_model.fit(X_train, y_train)
     else:
-        best_features = X_train.columns
-        feat_model = default
+        best_features = None
 
     # Optimise hyperparameters, plotting convergence
     if optimise:
         fname = f'{plot_dir}/convergence_{bf_name}_{mf_name}.png'
         opt_model = optimise_hypers(X_train, y_train, fname)
     else:
-        opt_model = feat_model
+        opt_model = default
 
     # Define optimal classifier and print score
     y_pred_opt = opt_model.predict(X_test)
@@ -441,7 +430,7 @@ def get_clf(clf_models, X_train, all_y_train, X_test, all_y_test, plot_dir,
 
     # Add individual precision scores to dictionary
     precision_scores ={lab: precision_score(y_test, y_pred_opt, labels=[lab_no],
-                                              average='macro')
+                                              average='micro')
                        for lab, lab_no in lab_dict.items()}
 
     # Plot confusion matrix
@@ -520,84 +509,34 @@ def optimise_hypers(X_train, y_train, fname):
     Returns:
         model (sklearn classifier): Optimised classifier
     """
-    warnings.filterwarnings("ignore")
-
     # Define default model
-    xgb = XGBClassifier(eval_metric=my_precision, random_state=42, verbosity=0)
+    xgb = XGBClassifier(random_state=42, verbosity=0)
 
-    # Hyperparameters to optimise
-    space = [Integer(4, 15, name='max_depth'),
-             Real(0.1, 0.3, "log-uniform", name='learning_rate'),
-             Integer(0, 5, name='min_child_weight'),
-             Real(0.5, 1, "log-uniform", name='subsample'),
-             Real(0.5, 1, "log-uniform", name='colsample_bytree')]
+    # Define search space
+    space = {'learning_rate': (0.01, 1.0, 'log-uniform'),
+             'min_child_weight': (0, 10),
+             'max_depth': (0, 50),
+             'max_delta_step': (0, 20),
+             'subsample': (0.01, 1.0, 'uniform'),
+             'colsample_bytree': (0.1, 1.0, 'uniform'),
+             'colsample_bylevel': (0.1, 1.0, 'uniform'),
+             'reg_lambda': (1e-9, 1000, 'log-uniform'),
+             'reg_alpha': (1e-9, 1.0, 'log-uniform'),
+             'gamma': (1e-9, 0.5, 'log-uniform'),
+             'min_child_weight': (0, 5),
+             'n_estimators': (50, 100),
+             'scale_pos_weight': (1, 500, 'log-uniform')}
 
-    # fit_params = {
-    #     'early_stopping_rounds': 10,
-    #     'eval_metric':my_precision,
-    #     'eval_set':[(X_train, y_train)],
-    #     'verbose': False,
-    # }
+    # Perform Bayesian optimization
+    warnings.filterwarnings("ignore")
+    opt_clf = BayesSearchCV(estimator=xgb, search_spaces=space, cv=3,
+                            scoring=my_precision, n_iter=10, n_jobs=-1, 
+                            verbose=0)
+    opt_clf.fit(X_train, y_train)
 
-    # space = {
-    #     'learning_rate': (0.01, 1.0, 'log-uniform'),
-    #     'min_child_weight': (0, 10),
-    #     'max_depth': (0, 50),
-    #     'max_delta_step': (0, 20),
-    #     'subsample': (0.01, 1.0, 'uniform'),
-    #     'colsample_bytree': (0.1, 1.0, 'uniform'),
-    #     'colsample_bylevel': (0.1, 1.0, 'uniform'),
-    #     'reg_lambda': (1e-9, 1000, 'log-uniform'),
-    #     'reg_alpha': (1e-9, 1.0, 'log-uniform'),
-    #     'gamma': (1e-9, 0.5, 'log-uniform'),
-    #     'min_child_weight': (0, 5),
-    #     'n_estimators': (50, 100),
-    #     'scale_pos_weight': (1, 500, 'log-uniform')
-    # }
-
-    # Decorator to use named arguments - use micro-averaged precision as
-    # scoring function
-    @use_named_args(space)
-    def objective(**params):
-        xgb.set_params(**params)
-        return -np.mean(cross_val_score(xgb, X_train, y_train, cv=5, n_jobs=-1,
-                                        scoring=my_precision))
-
-    # Optimise hyperparameters                  
-    res_gp = gp_minimize(objective, space, n_calls=20, random_state=0)
-
-    # # Perform Bayesian optimization
-    # opt_clf = BayesSearchCV(estimator=xgb, search_spaces=space, 
-    #                         scoring=my_precision, n_iter=10, 
-    #                         fit_params=fit_params,
-    #                         cv=3, n_jobs=-1, verbose=0)
-    # opt_clf.fit(X_train, y_train)
-
-    # # Print best parameters
-    # print(f"Best parameters: {opt_clf.best_params_}")
-    # print(f"Best score: {opt_clf.best_score_}")
-
-    # Print best score and parameters
-    print(f'Best score: {res_gp.fun}')
-    print(f'Best parameters: {res_gp.x}')
-
-    # Define model with best hyperparameters
-    opt_model = XGBClassifier.set_params(
-        **dict(zip(['max_depth', 'learning_rate', 'min_child_weight', 
-                    'subsample', 'colsample_bytree'], res_gp.x))
-    )
-
-    # Train model with best hyperparameters
-    opt_model.fit(X_train, y_train)
-
-    # # Define model with best hyperparameters
-    # opt_model = XGBClassifier.set_params(bayes_search.best_params_)
-
-    # Make convergence plot
-    fig, ax = plt.subplots() 
-    plot_convergence(res_gp)
-    fig.savefig(fname)
-    plt.close()
+    # Print best parameters
+    print(f"Best parameters: {opt_clf.best_params_}")
+    print(f"Best score: {opt_clf.best_score_}")
 
     return opt_clf
 

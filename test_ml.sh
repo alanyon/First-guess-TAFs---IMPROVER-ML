@@ -7,7 +7,7 @@
 #SBATCH --error=/home/h04/alanyon/first_guess_TAFs/improver_ml/EGTK.err
 
 # Data directories
-export OUTPUT_DIR=/data/users/alanyon/tafs/improver/verification/20230805-20240805_ml
+export OUTPUT_DIR=/data/users/alanyon/tafs/improver/verification/20230805-20240921_ml_testing
 
 # Define pythonpath
 export PYTHONPATH=$PYTHONPATH:~alanyon/first_guess_TAFs/improver_ml/
