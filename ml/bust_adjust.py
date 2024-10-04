@@ -38,6 +38,8 @@ def main():
     # Get icao from date icao dictionary
     icao = co.DATE_ICAOS[FAKE_DATE]
 
+    print('icao', icao)
+
     # Unpickle classifier models
     with open(f'{OUTPUT_DIR}/pickles/clfs_data_{icao}', 'rb') as file_object:
         unpickler = pickle.Unpickler(file_object)

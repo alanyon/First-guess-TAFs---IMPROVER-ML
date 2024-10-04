@@ -70,6 +70,8 @@ def main():
     # Get icao from date icao dictionary
     icao = co.DATE_ICAOS[FAKE_DATE]
 
+    print('icao', icao)
+
     # To collect classifier times and scores
     m_scores = {
         'vis': {'Classifier': [], 'Evaluation Metric': [], 'Score': []},
