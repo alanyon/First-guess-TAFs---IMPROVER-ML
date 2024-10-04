@@ -68,7 +68,7 @@ def main():
     pd.options.mode.chained_assignment = None
 
     # Get icao from date icao dictionary
-    icao = co.DATE_ICAO[FAKE_DATE]
+    icao = co.DATE_ICAOS[FAKE_DATE]
 
     # To collect classifier times and scores
     m_scores = {
