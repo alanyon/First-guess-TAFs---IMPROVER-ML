@@ -246,6 +246,10 @@ def update_taf(tdf, site_df, clf_models, clf_type):
     # Simplified classifier name
     c_name = clf_type.replace(' ', '_').lower()
 
+    # TESTING
+    if os.path.exists(f'{OUTPUT_DIR}/tafs/{icao}_old.txt'):
+        exit()
+
     # Generate TAF using old data and write to text file
     if c_name == 'xgboost':
         old_taf = ge.taf_gen(site_df)
