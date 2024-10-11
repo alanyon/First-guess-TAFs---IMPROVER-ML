@@ -51,7 +51,7 @@ FAKE_DATE = os.environ['FAKE_DATE']
 # Other constants
 SCORES = {'F1 score': f1_score, 'Recall': recall_score, 
           'Precision': precision_score}
-CLASSIFIERS = ['XGBoost']
+CLASSIFIERS = ['Random Forest', 'XGBoost']
 
 # Seaborn settings
 sns.set_style('darkgrid')
@@ -84,7 +84,8 @@ def main():
     best_features = {}
 
     # Unpickle data if available
-    if os.path.exists(f'{OUTPUT_DIR}/pickles/clfs_data_{icao}'):
+    if 1 == 2: # TESTING
+    # if os.path.exists(f'{OUTPUT_DIR}/pickles/clfs_data_{icao}'):
         print(f'Unpickling data for {icao}')
         with open(f'{OUTPUT_DIR}/pickles/clfs_data_{icao}',
                     'rb') as file_object:
@@ -412,18 +413,24 @@ def get_clf(clf_models, X_train, all_y_train, X_test, all_y_test, plot_dir,
     else:
         best_features = None
 
-    # Optimise hyperparameters, plotting convergence
+    # Optimise hyperparameters
     if optimise:
         fname = f'{plot_dir}/convergence_{bf_name}_{mf_name}.png'
-        opt_model = optimise_hypers(X_train, y_train, fname)
+        opt_model = optimise_hypers(X_train, y_train, fname, model_name)
     else:
         opt_model = default
 
     # Define optimal classifier and print score
     y_pred_opt = opt_model.predict(X_test)
-    print('Score after optimisation:', precision_score(y_test, y_pred_opt, 
-                                                       labels=[1, 2],   
-                                                       average='micro')) 
+    opt_precision =  precision_score(y_test, y_pred_opt, labels=[1, 2],   
+                                     average='micro')
+    print('Score after optimisation:', opt_precision)
+
+    # Print which model got the better score
+    if opt_precision > default_precision:
+        print('Optimised model better')
+    else:
+        print('Default model better')
 
     # # Add individual precision scores to dictionary
     # precision_scores ={lab: precision_score(y_test, y_pred_opt, labels=[lab_no],
@@ -439,6 +446,9 @@ def get_clf(clf_models, X_train, all_y_train, X_test, all_y_test, plot_dir,
     clf_models[f'{bf_name}_{mf_name}'] = opt_model
     clf_models[f'{bf_name}_{mf_name}_label_dict'] = lab_dict
     # clf_models[f'{bf_name}_{mf_name}_scores'] = precision_scores
+
+    print(f'Finished {model_name} for {bust_type}')
+    exit()
 
     return clf_models, m_scores, m_times, best_features
 
@@ -492,10 +502,12 @@ def my_precision(estimator, X, y):
 
     # Calculate micro-averaged precision score, ignoring the 'no bust'
     # class (0)
-    return precision_score(y, y_pred, labels=[1, 2], average='micro')
+    score = precision_score(y, y_pred, labels=[1, 2], average='micro')
+
+    return score
 
 
-def optimise_hypers(X_train, y_train, fname):
+def optimise_hypers(X_train, y_train, fname, model_name):
     """
     Optimises hyperparameters for classifier.
 
@@ -503,31 +515,49 @@ def optimise_hypers(X_train, y_train, fname):
         X_train (pandas.DataFrame): Training input data
         y_train (pandas.Series): Training target data
         fname (str): File path for saving plot
+        model_name (str): Classifier name
     Returns:
         model (sklearn classifier): Optimised classifier
     """
-    # Define default model
-    xgb = XGBClassifier(random_state=42, verbosity=0)
+    # For XGBoost
+    if model_name == 'XGBoost':
 
-    # Define search space
-    space = {'learning_rate': (0.01, 1.0, 'log-uniform'),
-             'min_child_weight': (0, 10),
-             'max_depth': (0, 50),
-             'max_delta_step': (0, 20),
-             'subsample': (0.01, 1.0, 'uniform'),
-             'colsample_bytree': (0.1, 1.0, 'uniform'),
-             'colsample_bylevel': (0.1, 1.0, 'uniform'),
-             'reg_lambda': (1e-9, 1000, 'log-uniform'),
-             'reg_alpha': (1e-9, 1.0, 'log-uniform'),
-             'gamma': (1e-9, 0.5, 'log-uniform'),
-             'min_child_weight': (0, 5),
-             'n_estimators': (50, 100),
-             'scale_pos_weight': (1, 500, 'log-uniform')}
+        # Define classifier
+        clf = XGBClassifier(random_state=42, verbosity=0)
+
+        # Define search space
+        space = {'learning_rate': (0.01, 1.0, 'log-uniform'),
+                 'min_child_weight': (0, 10),
+                 'max_depth': (0, 50),
+                 'max_delta_step': (0, 20),
+                 'subsample': (0.01, 1.0, 'uniform'),
+                 'colsample_bytree': (0.1, 1.0, 'uniform'),
+                 'colsample_bylevel': (0.1, 1.0, 'uniform'),
+                 'reg_lambda': (1e-9, 1000, 'log-uniform'),
+                 'reg_alpha': (1e-9, 1.0, 'log-uniform'),
+                 'gamma': (1e-9, 0.5, 'log-uniform'),
+                 'min_child_weight': (0, 5),
+                 'n_estimators': (50, 100),
+                 'scale_pos_weight': (1, 500, 'log-uniform')}
+
+    # For Random Forest
+    elif model_name == 'Random Forest':
+
+        # Define classifier
+        clf = RandomForestClassifier(random_state=42)
+
+        # Define search space
+        space = {'n_estimators': (50, 500),
+                 'max_depth': [None, 2, 3, 4],
+                 'min_samples_split': [2, 3, 4],
+                 'min_samples_leaf': [1, 2, 3],
+                 'max_leaf_nodes': [None, 10, 20, 30, 40, 50],
+                 'criterion': ['gini', 'entropy']}
 
     # Perform Bayesian optimization
     warnings.filterwarnings("ignore")
-    opt_clf = BayesSearchCV(estimator=xgb, search_spaces=space, cv=3,
-                            scoring=my_precision, n_iter=10, n_jobs=-1, 
+    opt_clf = BayesSearchCV(estimator=clf, search_spaces=space, cv=3,
+                            scoring=my_precision, n_iter=50, n_jobs=-1, 
                             verbose=0)
     opt_clf.fit(X_train, y_train)
 
