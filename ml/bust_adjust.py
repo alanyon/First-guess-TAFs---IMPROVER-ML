@@ -255,7 +255,6 @@ def update_taf(tdf, site_df, clf_models, clf_type):
             o_file.write(old_taf)
 
     # Adjust data 5 times to allow for up to 5 TAF group adjustments
-    # for ind in range(5):
     for ind in range(5):
 
         # Adjust model data based on predicted bust labels

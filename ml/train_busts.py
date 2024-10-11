@@ -84,8 +84,8 @@ def main():
     best_features = {}
 
     # Unpickle data if available
-    if 1 == 2: # TESTING
-    # if os.path.exists(f'{OUTPUT_DIR}/pickles/clfs_data_{icao}'):
+    # if 1 == 2: # TESTING
+    if os.path.exists(f'{OUTPUT_DIR}/pickles/clfs_data_{icao}'):
         print(f'Unpickling data for {icao}')
         with open(f'{OUTPUT_DIR}/pickles/clfs_data_{icao}',
                     'rb') as file_object:
@@ -446,9 +446,6 @@ def get_clf(clf_models, X_train, all_y_train, X_test, all_y_test, plot_dir,
     clf_models[f'{bf_name}_{mf_name}'] = opt_model
     clf_models[f'{bf_name}_{mf_name}_label_dict'] = lab_dict
     # clf_models[f'{bf_name}_{mf_name}_scores'] = precision_scores
-
-    print(f'Finished {model_name} for {bust_type}')
-    exit()
 
     return clf_models, m_scores, m_times, best_features
 
