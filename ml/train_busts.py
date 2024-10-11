@@ -85,10 +85,6 @@ def main():
 
     # Unpickle data if available
     if os.path.exists(f'{OUTPUT_DIR}/pickles/clfs_data_{icao}'):
-
-        # TESTING
-        exit()
-
         print(f'Unpickling data for {icao}')
         with open(f'{OUTPUT_DIR}/pickles/clfs_data_{icao}',
                     'rb') as file_object:
