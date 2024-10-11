@@ -48,6 +48,7 @@ def main():
     # Use classifiers to predict bust labels and re-write TAFs
     for (tdf, site_df) in test_data:
         update_taf(tdf, site_df, clf_models, 'XGBoost')
+        update_taf(tdf, site_df, clf_models, 'Random Forest')
 
 
 def adjust_vis_cld(site_df, row, param):
