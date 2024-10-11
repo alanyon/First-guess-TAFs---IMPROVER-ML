@@ -525,7 +525,6 @@ def optimise_hypers(X_train, y_train, fname, model_name):
         # Define search space
         space = {'learning_rate': (0.01, 1.0, 'log-uniform'),
                  'min_child_weight': (0, 10),
-                 'max_depth': (0, 50),
                  'max_delta_step': (0, 20),
                  'subsample': (0.01, 1.0, 'uniform'),
                  'colsample_bytree': (0.1, 1.0, 'uniform'),
@@ -554,7 +553,7 @@ def optimise_hypers(X_train, y_train, fname, model_name):
     # Perform Bayesian optimization
     warnings.filterwarnings("ignore")
     opt_clf = BayesSearchCV(estimator=clf, search_spaces=space, cv=3,
-                            scoring=my_precision, n_iter=50, n_jobs=-1, 
+                            scoring=my_precision, n_iter=40, n_jobs=-1, 
                             verbose=0)
     opt_clf.fit(X_train, y_train)
 
