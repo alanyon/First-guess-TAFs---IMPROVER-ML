@@ -552,8 +552,8 @@ def optimise_hypers(X_train, y_train, fname, model_name):
     bayes_clf.fit(X_train, y_train)
 
     # Print best parameters
-    print(f"Best parameters: {opt_clf.best_params_}")
-    print(f"Best score: {opt_clf.best_score_}")
+    print(f"Best parameters: {bayes_clf.best_params_}")
+    print(f"Best score: {bayes_clf.best_score_}")
 
     # Get the classifier with the best parameters
     best_clf = opt_clf.best_estimator_

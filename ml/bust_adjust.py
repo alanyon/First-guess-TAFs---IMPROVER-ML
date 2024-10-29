@@ -152,41 +152,12 @@ def get_labels(X, clf_models, wx_type, c_name):
     # Predict label classes (0, 1, etc)
     y_pred = clf_models[f'{wx_type}_{c_name}'].predict(X)
 
-    # # If scores are low, set to no bust
-    # label_dict = clf_models[f'{wx_type}_{c_name}_label_dict']
-    # lab_dict_inv = {val: key for key, val in label_dict.items()}
-
-    # # Do no use prediction if precision is less than half
-    # for label, score in clf_models[f'{wx_type}_{c_name}_scores'].items():
-    #     if score <= 0.5:
-    #         y_pred[y_pred == label_dict[label]] = 0
-
     # Convert class integers to labels using label dictionary
     label_dict = clf_models[f'{wx_type}_{c_name}_label_dict']
     lab_dict_inv = {val: key for key, val in label_dict.items()}
     pred_labels = np.vectorize(lab_dict_inv.get)(y_pred)
 
     return pred_labels
-
-
-def my_precision(estimator, X, y):
-    """
-    Creates custom precision score that gives a micro average but
-    ignores the 'no bust' class, for use in hyperparameter optimisation.
-
-    Args:
-        estimator (sklearn classifier): Classifier
-        X (pandas.DataFrame): Input data
-        y (pandas.Series): Target data
-    Returns:    
-        precision_score (float): micro-averaged precision score
-    """
-    # Make predictions
-    y_pred = estimator.predict(X)
-
-    # Calculate micro-averaged precision score, ignoring the 'no bust'
-    # class (0)
-    return precision_score(y, y_pred, labels=[1, 2], average='micro')
 
 
 def pred_adjust(site_df, tdf, clf_models, icao, c_name):
