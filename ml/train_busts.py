@@ -127,7 +127,7 @@ def main():
                 clf_models, m_scores, m_times, b_features = get_clf(
                     clf_models, X_train, all_y_train, X_test, all_y_test,
                     plot_dir, bust_type, model_name, m_scores,m_times, 
-                    get_features=False, optimise=True, 
+                    get_features=False, optimise=False, 
                     compare_models=False
                 )
 
