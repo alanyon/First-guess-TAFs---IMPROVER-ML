@@ -432,11 +432,6 @@ def get_clf(clf_models, X_train, all_y_train, X_test, all_y_test, plot_dir,
     else:
         print('Default model better')
 
-    # # Add individual precision scores to dictionary
-    # precision_scores ={lab: precision_score(y_test, y_pred_opt, labels=[lab_no],
-    #                                           average='micro')
-    #                    for lab, lab_no in lab_dict.items()}
-
     # Plot confusion matrix
     fname = f'{plot_dir}/cm_{bf_name}_{mf_name}_opt.png'
     plot_confusion_matrix(lab_dict, y_test, y_pred_opt, fname)
@@ -445,7 +440,6 @@ def get_clf(clf_models, X_train, all_y_train, X_test, all_y_test, plot_dir,
     bf_name = bust_type.split('_')[0]
     clf_models[f'{bf_name}_{mf_name}'] = opt_model
     clf_models[f'{bf_name}_{mf_name}_label_dict'] = lab_dict
-    # clf_models[f'{bf_name}_{mf_name}_scores'] = precision_scores
 
     return clf_models, m_scores, m_times, best_features
 
@@ -552,16 +546,19 @@ def optimise_hypers(X_train, y_train, fname, model_name):
 
     # Perform Bayesian optimization
     warnings.filterwarnings("ignore")
-    opt_clf = BayesSearchCV(estimator=clf, search_spaces=space, cv=3,
-                            scoring=my_precision, n_iter=40, n_jobs=-1, 
-                            verbose=0)
-    opt_clf.fit(X_train, y_train)
+    bayes_clf = BayesSearchCV(estimator=clf, search_spaces=space, cv=3,
+                              scoring=my_precision, n_iter=40, n_jobs=-1, 
+                              verbose=0)
+    bayes_clf.fit(X_train, y_train)
 
     # Print best parameters
     print(f"Best parameters: {opt_clf.best_params_}")
     print(f"Best score: {opt_clf.best_score_}")
 
-    return opt_clf
+    # Get the classifier with the best parameters
+    best_clf = opt_clf.best_estimator_
+
+    return best_clf
 
 
 def pickle_unpickle(p_data, file_path):
