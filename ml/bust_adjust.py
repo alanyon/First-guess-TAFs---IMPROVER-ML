@@ -45,9 +45,6 @@ def main():
         unpickler = pickle.Unpickler(file_object)
         test_data, clf_models = unpickler.load()
 
-    print(clf_models)
-    exit()
-
     # Use classifiers to predict bust labels and re-write TAFs
     for (tdf, site_df) in test_data:
         update_taf(tdf, site_df, clf_models, 'XGBoost')
