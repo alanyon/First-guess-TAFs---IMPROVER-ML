@@ -116,7 +116,7 @@ def main():
             clf_models, m_scores, m_times, b_features = get_clf(
                 clf_models, X_train, all_y_train, X_test, all_y_test,
                 plot_dir, bust_type, model_name, m_scores,m_times, 
-                get_features=True, optimise=True, 
+                get_features=False, optimise=True, 
                 compare_models=False
             )
 
@@ -457,7 +457,7 @@ def get_label_dict(bust_labels):
     return lab_dict
 
 
-def get_prec(X_train, y_train, model):
+def get_prec(X_train, y_train, mod):
 
     # Use Stratified K-Fold for cross-validation
     skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
@@ -466,8 +466,8 @@ def get_prec(X_train, y_train, model):
     for tr_ind, te_ind in skf.split(X_train, y_train):
 
         # Split the data
-        X_train_fold, X_test_fold = X_train[tr_ind], X_train[te_ind]
-        y_train_fold, y_test_fold = y_train[tr_ind], y_train[te_ind]
+        X_train_fold, X_test_fold = X_train.iloc[tr_ind], X_train.iloc[te_ind]
+        y_train_fold, y_test_fold = y_train.iloc[tr_ind], y_train.iloc[te_ind]
 
         # Balance data, fit, make predictions, calc precision
         X_tr_b, y_tr_b = balance_data(X_train_fold, y_train_fold)
@@ -546,10 +546,6 @@ def optimise_hypers(X_train, y_train, X_train_b, y_train_b, fname, model_name,
     Returns:
         model (sklearn classifier): Optimised classifier
     """
-    # # # Split data into training and validation sets
-    # X_tr, X_vl, y_tr, y_vl = train_test_split(X_train, y_train, test_size=0.2)
-
-
     # For XGBoost
     if model_name == 'XGBoost':
 
@@ -613,7 +609,7 @@ def optimise_hypers(X_train, y_train, X_train_b, y_train_b, fname, model_name,
 
         study = optuna.create_study(direction='maximize', 
                                     study_name='parallel_study')
-        study.optimize(objective, n_trials=100)
+        study.optimize(objective, n_trials=10)
         trial = study.best_trial
         print(f"Best precision {trial.value}")
         print("Best Params")
