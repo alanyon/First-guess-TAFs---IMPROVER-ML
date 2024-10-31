@@ -174,7 +174,7 @@ def pred_adjust(site_df, tdf, clf_models, icao, c_name):
         site_df (pandas.DataFrame): Adjusted site model data
     """
     # Get X columns from dataframe
-    X = tdf[clf_models[f'{wx_type}_{c_name}_features']]
+    X = tdf[co.PARAM_COLS]
     X = X.apply(pd.to_numeric)
 
     # Create bust predicts dataframe, starting with valid times
@@ -183,8 +183,11 @@ def pred_adjust(site_df, tdf, clf_models, icao, c_name):
     # Predict bust types for each weather type
     for wx_type in ['vis', 'cld']:
 
+        # Just use best features
+        X_best = X[co.BEST_FEATS[wx_type]]
+
         # Predict wx type bust labels
-        pred_labels = get_labels(X, clf_models, wx_type, c_name)
+        pred_labels = get_labels(X_best, clf_models, wx_type, c_name)
 
         # Add labels to bust preds dataframe
         bust_preds[f'{wx_type}_pred_labels'] = pred_labels

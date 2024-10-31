@@ -86,8 +86,6 @@ def main():
     # To collect best features
     best_features = {}
 
-    print(f'Training models for {icao}')
-
     # Directory to send plots to
     plot_dir = f'{OUTPUT_DIR}/ml_plots/{icao}'
     if not os.path.exists(plot_dir):
@@ -459,6 +457,34 @@ def get_label_dict(bust_labels):
     return lab_dict
 
 
+def get_prec(X, y, model):
+
+    # Use Stratified K-Fold for cross-validation
+    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    scores = []
+
+    for tr_ind, te_ind in skf.split(X_train, y_train):
+
+        # Split the data
+        X_train_fold, X_test_fold = X_train[tr_ind], X_train[te_ind]
+        y_train_fold, y_test_fold = y_train[tr_ind], y_train[te_ind]
+
+        # Balance data, fit, make predictions, calc precision
+        X_tr_b, y_tr_b = balance_data(X_train_fold, y_train_fold)
+
+        # Fit model
+        mod.fit(X_tr_b, y_tr_b)
+
+        # Make predictions and score
+        y_pred = mod.predict(X_test_fold)
+        prec = precision_score(y_test_fold, y_pred, average='macro')
+        scores.append(prec)
+
+    mean_score = np.mean(scores)
+
+    return mean_score
+
+
 def get_xy(t_data):
     """
     Concatenates dataframe and separates into X/y.
@@ -520,8 +546,8 @@ def optimise_hypers(X_train, y_train, X_train_b, y_train_b, fname, model_name,
     Returns:
         model (sklearn classifier): Optimised classifier
     """
-    # # Split data into training and validation sets
-    X_tr, X_vl, y_tr, y_vl = train_test_split(X_train, y_train, test_size=0.2)
+    # # # Split data into training and validation sets
+    # X_tr, X_vl, y_tr, y_vl = train_test_split(X_train, y_train, test_size=0.2)
 
 
     # For XGBoost
@@ -546,13 +572,10 @@ def optimise_hypers(X_train, y_train, X_train_b, y_train_b, fname, model_name,
             # Define classifier
             mod = XGBClassifier(**param)
 
-            # Balance data, fit, make predictions, calc precision
-            X_tr_b, y_tr_b = balance_data(X_tr, y_tr)
-            mod.fit(X_tr_b, y_tr_b)
-            y_pred = mod.predict(X_vl)
-            prec = precision_score(y_vl, y_pred, average='macro')
+            # Use cross validation to get mean macro precision score
+            mean_prec_score = get_prec(X_train, y_train, mod)
 
-            return prec
+            return mean_prec_score
 
         study = optuna.create_study(direction='maximize', 
                                     study_name='parallel_study')
@@ -583,11 +606,8 @@ def optimise_hypers(X_train, y_train, X_train_b, y_train_b, fname, model_name,
             # Define classifier
             mod = RandomForestClassifier(**param)
 
-            # Balance data, fit, make predictions, calc precision
-            X_tr_b, y_tr_b = balance_data(X_tr, y_tr)
-            mod.fit(X_tr_b, y_tr_b)
-            y_pred = mod.predict(X_vl)
-            prec = precision_score(y_vl, y_pred, average='macro')
+            # Use cross validation to get mean macro precision score
+            mean_prec_score = get_prec(X_train, y_train, mod)
 
             return prec
 
