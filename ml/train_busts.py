@@ -457,13 +457,13 @@ def get_label_dict(bust_labels):
     return lab_dict
 
 
-def get_prec(X, y, model):
+def get_prec(X_train, y_train, model):
 
     # Use Stratified K-Fold for cross-validation
     skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
     scores = []
 
-    for tr_ind, te_ind in skf.split(X_train, y_train):
+    for tr_ind, te_ind in skf.split(X, y):
 
         # Split the data
         X_train_fold, X_test_fold = X_train[tr_ind], X_train[te_ind]
