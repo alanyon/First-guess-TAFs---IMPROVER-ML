@@ -605,7 +605,7 @@ def optimise_hypers(X_train, y_train, X_train_b, y_train_b, fname, model_name,
             # Use cross validation to get mean macro precision score
             mean_prec_score = get_prec(X_train, y_train, mod)
 
-            return prec
+            return mean_prec_score
 
         study = optuna.create_study(direction='maximize', 
                                     study_name='parallel_study')
