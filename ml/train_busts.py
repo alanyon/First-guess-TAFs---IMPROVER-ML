@@ -575,7 +575,7 @@ def optimise_hypers(X_train, y_train, X_train_b, y_train_b, fname, model_name,
 
         study = optuna.create_study(direction='maximize', 
                                     study_name='parallel_study')
-        study.optimize(objective, n_trials=10)
+        study.optimize(objective, n_trials=100)
         trial = study.best_trial
         print(f"Best precision {trial.value}")
         print("Best Params")
@@ -609,7 +609,7 @@ def optimise_hypers(X_train, y_train, X_train_b, y_train_b, fname, model_name,
 
         study = optuna.create_study(direction='maximize', 
                                     study_name='parallel_study')
-        study.optimize(objective, n_trials=10)
+        study.optimize(objective, n_trials=100)
         trial = study.best_trial
         print(f"Best precision {trial.value}")
         print("Best Params")
