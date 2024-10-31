@@ -116,7 +116,7 @@ def main():
             clf_models, m_scores, m_times, b_features = get_clf(
                 clf_models, X_train, all_y_train, X_test, all_y_test,
                 plot_dir, bust_type, model_name, m_scores,m_times, 
-                get_features=False, optimise=True, 
+                get_features=True, optimise=True, 
                 compare_models=False
             )
 
@@ -575,7 +575,7 @@ def optimise_hypers(X_train, y_train, X_train_b, y_train_b, fname, model_name,
 
         study = optuna.create_study(direction='maximize', 
                                     study_name='parallel_study')
-        study.optimize(objective, n_trials=100)
+        study.optimize(objective, n_trials=50)
         trial = study.best_trial
         print(f"Best precision {trial.value}")
         print("Best Params")
@@ -609,7 +609,7 @@ def optimise_hypers(X_train, y_train, X_train_b, y_train_b, fname, model_name,
 
         study = optuna.create_study(direction='maximize', 
                                     study_name='parallel_study')
-        study.optimize(objective, n_trials=100)
+        study.optimize(objective, n_trials=50)
         trial = study.best_trial
         print(f"Best precision {trial.value}")
         print("Best Params")
