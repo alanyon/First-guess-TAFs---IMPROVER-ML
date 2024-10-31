@@ -25,11 +25,13 @@ import pandas as pd
 import seaborn as sns
 from imblearn.over_sampling import SMOTE
 from imblearn.combine import SMOTETomek
+import optuna
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.metrics import (confusion_matrix, f1_score, precision_score,
                              recall_score)
 from sklearn.feature_selection import SelectFromModel
 from sklearn.model_selection import RandomizedSearchCV, train_test_split
+from sklearn.pipeline import Pipeline
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.preprocessing import StandardScaler
 from skopt.space import Real, Integer
@@ -51,7 +53,8 @@ FAKE_DATE = os.environ['FAKE_DATE']
 # Other constants
 SCORES = {'F1 score': f1_score, 'Recall': recall_score, 
           'Precision': precision_score}
-CLASSIFIERS = ['Random Forest', 'XGBoost']
+# CLASSIFIERS = ['Random Forest']
+CLASSIFIERS = ['XGBoost', 'Random Forest']
 
 # Seaborn settings
 sns.set_style('darkgrid')
@@ -83,66 +86,54 @@ def main():
     # To collect best features
     best_features = {}
 
-    # Unpickle data if available
-    # if 1 == 2: # TESTING
-    if os.path.exists(f'{OUTPUT_DIR}/pickles/clfs_data_{icao}'):
-        print(f'Unpickling data for {icao}')
-        with open(f'{OUTPUT_DIR}/pickles/clfs_data_{icao}',
-                    'rb') as file_object:
-            unpickler = pickle.Unpickler(file_object)
-            test_data, clf_models = unpickler.load()
+    print(f'Training models for {icao}')
 
-    # Otherwise, create classifiers
-    else:
+    # Directory to send plots to
+    plot_dir = f'{OUTPUT_DIR}/ml_plots/{icao}'
+    if not os.path.exists(plot_dir):
+        os.makedirs(plot_dir)
 
-        print(f'Training models for {icao}')
+    # Unpickle data
+    i_pickle = f'{OUTPUT_DIR}/pickles/pickle_{icao}'
+    with open(i_pickle, 'rb') as file_object:
+        unpickler = pickle.Unpickler(file_object)
+        taf_data = unpickler.load()
 
-        # Directory to send plots to
-        plot_dir = f'{OUTPUT_DIR}/ml_plots/{icao}'
-        if not os.path.exists(plot_dir):
-            os.makedirs(plot_dir)
+    # Split data into train/test
+    X_train, all_y_train, X_test, all_y_test, test_data = split_data(
+        taf_data
+    )
 
-        # Unpickle data
-        i_pickle = f'{OUTPUT_DIR}/pickles/pickle_{icao}'
-        with open(i_pickle, 'rb') as file_object:
-            unpickler = pickle.Unpickler(file_object)
-            taf_data = unpickler.load()
+    # To collect classifier models in
+    clf_models = {}
 
-        # Split data into train/test
-        X_train, all_y_train, X_test, all_y_test, test_data = split_data(
-            taf_data
-        )
+    # Create classifier for each bust type
+    icao_best_features = {}
+    for bust_type in co.BUST_COLS:
 
-        # To collect classifier models in
-        clf_models = {}
+        # Loop through all classifiers to test
+        for model_name in CLASSIFIERS:
 
-        # Create classifier for each bust type
-        icao_best_features = {}
-        for bust_type in co.BUST_COLS:
+            # Get models to predict bust/no bust and bust type
+            clf_models, m_scores, m_times, b_features = get_clf(
+                clf_models, X_train, all_y_train, X_test, all_y_test,
+                plot_dir, bust_type, model_name, m_scores,m_times, 
+                get_features=True, optimise=True, 
+                compare_models=False
+            )
 
-            # Loop through all classifiers to test
-            for model_name in CLASSIFIERS:
+            # Update best features
+            icao_best_features[bust_type] = b_features
 
-                # Get models to predict bust/no bust and bust type
-                clf_models, m_scores, m_times, b_features = get_clf(
-                    clf_models, X_train, all_y_train, X_test, all_y_test,
-                    plot_dir, bust_type, model_name, m_scores,m_times, 
-                    get_features=False, optimise=False, 
-                    compare_models=False
-                )
+    # Add best features to dictionary
+    best_features[icao] = icao_best_features
 
-                # Update best features
-                icao_best_features[bust_type] = b_features
+    bl_data = [test_data, clf_models]
+    bl_fname = f'{OUTPUT_DIR}/pickles/clfs_data_{icao}'
 
-        # Add best features to dictionary
-        best_features[icao] = icao_best_features
-
-        bl_data = [test_data, clf_models]
-        bl_fname = f'{OUTPUT_DIR}/pickles/clfs_data_{icao}'
-
-        # Pickle files including bust label classifier models
-        with open(bl_fname, 'wb') as f_object:
-            pickle.dump(bl_data, f_object)
+    # Pickle files including bust label classifier models
+    with open(bl_fname, 'wb') as f_object:
+        pickle.dump(bl_data, f_object)
 
     # # Pickle/unpickle best features
     # fname = f'{OUTPUT_DIR}/pickles/best_features'
@@ -249,7 +240,7 @@ def best_features_plot(best_features, bust_type):
 
 
 def get_best_features(default, default_precision, X_train, X_test, y_train, 
-                      y_test, feat_fname):
+                      y_test, feat_fname, model_name):
     """
     Gets best features for classifier.
 
@@ -273,7 +264,7 @@ def get_best_features(default, default_precision, X_train, X_test, y_train,
     # Make plot of feature importances
     fig, ax = plt.subplots()
     ax.barh(sorted_features, default.feature_importances_[sorted_idx])
-    ax.set_xlabel("XGBoost Feature Importance")
+    ax.set_xlabel("Feature Importance")
     plt.tight_layout()
     fig.savefig(feat_fname)
     plt.close()
@@ -284,6 +275,7 @@ def get_best_features(default, default_precision, X_train, X_test, y_train,
 
     # Get thresholds for feature selection and loop through them
     thresholds = sort(default.feature_importances_)
+
     for thresh in thresholds:
 
         # select features using threshold
@@ -293,7 +285,10 @@ def get_best_features(default, default_precision, X_train, X_test, y_train,
         select_X_train = selection.transform(X_train)
 
         # train model
-        selection_model = XGBClassifier(random_state=42)
+        if model_name == 'XGBoost':
+            selection_model = XGBClassifier(random_state=42)
+        elif model_name == 'Random Forest':
+            selection_model = RandomForestClassifier(random_state=42)
         selection_model.fit(select_X_train, y_train)
 
         # eval model
@@ -301,13 +296,12 @@ def get_best_features(default, default_precision, X_train, X_test, y_train,
         predictions = selection_model.predict(select_X_test)
 
         # Print score
-        sel_precision = precision_score(y_test, predictions, labels=[1, 2],   
-                                        average='micro')
+        sel_precision = precision_score(y_test, predictions, average='macro')
         print(f'Thresh={thresh}, n={select_X_train.shape[1]} '
               f'Precision={sel_precision}')
 
-        # Update best features if necessary
-        if round(sel_precision, 3) >= round(default_precision, 3):
+        # Update best features if more than 0.02 better
+        if round(sel_precision, 3) >= round(default_precision, 3) + 0.02:
             best_features = sorted_features[-select_X_train.shape[1]:]
             best_precision = sel_precision
 
@@ -352,13 +346,13 @@ def get_clf(clf_models, X_train, all_y_train, X_test, all_y_test, plot_dir,
     y_test = all_y_test[bust_type].map(lab_dict)
 
     # Oversample minority class using SMOTE and clean using Tomek links
-    X_train, y_train = balance_data(X_train, y_train)
+    X_train_b, y_train_b = balance_data(X_train, y_train)
 
     # Define default model  
     if model_name == 'XGBoost':
-        default = XGBClassifier(random_state=42)
+        default = XGBClassifier(random_state=42, n_estimators=500)
     elif model_name == 'Random Forest':
-        default = RandomForestClassifier(random_state=42)
+        default = RandomForestClassifier(random_state=42, n_estimators=500)
     elif model_name == 'Decision Tree':
         default = DecisionTreeClassifier(random_state=42)
     elif model_name == 'Gradient Boosting':
@@ -367,15 +361,16 @@ def get_clf(clf_models, X_train, all_y_train, X_test, all_y_test, plot_dir,
     # Train model and get time      
     start = time.time()
     warnings.filterwarnings("ignore")
-    default.fit(X_train, y_train)
+    default.fit(X_train_b, y_train_b)
     end = time.time()
     elapsed = end - start
     print(f'\nElapsed time for {model_name}: {elapsed:.2f} seconds')
 
     # Get default precision score
     default_y_pred = default.predict(X_test)
-    default_precision = precision_score(y_test, default_y_pred, labels=[1, 2], 
-                                        average='micro')
+    default_precision = precision_score(y_test, default_y_pred, 
+                                        average='macro')
+    # f1 = f1_score(y_test, default_y_pred, average='macro')
     print('Score before optimisation:', default_precision)
 
     # Plot confusion matrix
@@ -407,23 +402,31 @@ def get_clf(clf_models, X_train, all_y_train, X_test, all_y_test, plot_dir,
     if get_features:
         feat_fname = f'{plot_dir}/feature_importance_{bf_name}_{mf_name}.png'
         best_features = get_best_features(
-            default, default_precision, X_train, X_test, y_train, y_test, 
-            feat_fname
+            default, default_precision, X_train_b, X_test, y_train_b, 
+            y_test, feat_fname, model_name
         )
+        X_train, X_train_b = X_train[best_features], X_train_b[best_features]
+        X_test = X_test[best_features]
+
+        # If any features were removed, print them
+        if len(best_features) < len(X_train.columns):
+            print('Removed features:', 
+                  set(X_train.columns) - set(best_features))
     else:
-        best_features = None
+        best_features = X_train.columns
 
     # Optimise hyperparameters
     if optimise:
         fname = f'{plot_dir}/convergence_{bf_name}_{mf_name}.png'
-        opt_model = optimise_hypers(X_train, y_train, fname, model_name)
+        opt_model = optimise_hypers(X_train, y_train, X_train_b, y_train_b,
+                                    fname, model_name, lab_dict)
     else:
         opt_model = default
 
     # Define optimal classifier and print score
     y_pred_opt = opt_model.predict(X_test)
-    opt_precision =  precision_score(y_test, y_pred_opt, labels=[1, 2],   
-                                     average='micro')
+    opt_precision =  precision_score(y_test, y_pred_opt, average='macro')
+    # f1 = f1_score(y_test, y_pred_opt, average='macro')
     print('Score after optimisation:', opt_precision)
 
     # Print which model got the better score
@@ -440,6 +443,7 @@ def get_clf(clf_models, X_train, all_y_train, X_test, all_y_test, plot_dir,
     bf_name = bust_type.split('_')[0]
     clf_models[f'{bf_name}_{mf_name}'] = opt_model
     clf_models[f'{bf_name}_{mf_name}_label_dict'] = lab_dict
+    clf_models[f'{bf_name}_{mf_name}_features'] = best_features
 
     return clf_models, m_scores, m_times, best_features
 
@@ -495,10 +499,16 @@ def my_precision(estimator, X, y):
     # class (0)
     score = precision_score(y, y_pred, labels=[1, 2], average='micro')
 
-    return score
+    return score, y_pred
 
 
-def optimise_hypers(X_train, y_train, fname, model_name):
+def oob_precision(y_true, y_pred):
+
+    return precision_score(y_true, y_pred, labels=[1, 2], average='micro')
+
+
+def optimise_hypers(X_train, y_train, X_train_b, y_train_b, fname, model_name, 
+                    lab_dict):
     """
     Optimises hyperparameters for classifier.
 
@@ -510,53 +520,90 @@ def optimise_hypers(X_train, y_train, fname, model_name):
     Returns:
         model (sklearn classifier): Optimised classifier
     """
+    # # Split data into training and validation sets
+    X_tr, X_vl, y_tr, y_vl = train_test_split(X_train, y_train, test_size=0.2)
+
+
     # For XGBoost
     if model_name == 'XGBoost':
 
-        # Define classifier
-        clf = XGBClassifier(random_state=42, verbosity=0)
+        # Define objective function
+        def objective(trial):
 
-        # Define search space
-        space = {'learning_rate': (0.01, 1.0, 'log-uniform'),
-                 'min_child_weight': (0, 10),
-                 'max_delta_step': (0, 20),
-                 'subsample': (0.01, 1.0, 'uniform'),
-                 'colsample_bytree': (0.1, 1.0, 'uniform'),
-                 'colsample_bylevel': (0.1, 1.0, 'uniform'),
-                 'reg_lambda': (1e-9, 1000, 'log-uniform'),
-                 'reg_alpha': (1e-9, 1.0, 'log-uniform'),
-                 'gamma': (1e-9, 0.5, 'log-uniform'),
-                 'min_child_weight': (0, 5),
-                 'n_estimators': (50, 100),
-                 'scale_pos_weight': (1, 500, 'log-uniform')}
+            # Define search space
+            param = {
+                'n_estimators': 500,
+                'random_state': 42,
+                'max_depth': trial.suggest_categorical('max_depth', [None] + 
+                                                       list(range(2, 11))),
+                'learning_rate': trial.suggest_float('learning_rate', 0.01, 
+                                                     0.2),
+                'min_child_weight': trial.suggest_int("min_child_weight", 1, 
+                                                      6), 
+                'n_jobs': -1
+            }
+
+            # Define classifier
+            mod = XGBClassifier(**param)
+
+            # Balance data, fit, make predictions, calc precision
+            X_tr_b, y_tr_b = balance_data(X_tr, y_tr)
+            mod.fit(X_tr_b, y_tr_b)
+            y_pred = mod.predict(X_vl)
+            prec = precision_score(y_vl, y_pred, average='macro')
+
+            return prec
+
+        study = optuna.create_study(direction='maximize', 
+                                    study_name='parallel_study')
+        study.optimize(objective, n_trials=10)
+        trial = study.best_trial
+        print(f"Best precision {trial.value}")
+        print("Best Params")
+        print(trial.params)
+
+        best_clf = XGBClassifier(random_state=42, verbosity=0, **trial.params)
 
     # For Random Forest
     elif model_name == 'Random Forest':
 
-        # Define classifier
-        clf = RandomForestClassifier(random_state=42)
+        def objective(trial):
 
-        # Define search space
-        space = {'n_estimators': (50, 500),
-                 'max_depth': [None, 2, 3, 4],
-                 'min_samples_split': [2, 3, 4],
-                 'min_samples_leaf': [1, 2, 3],
-                 'max_leaf_nodes': [None, 10, 20, 30, 40, 50],
-                 'criterion': ['gini', 'entropy']}
+            param = {
+                'n_estimators': 500,
+                'random_state': 42,
+                'max_depth': trial.suggest_categorical("max_depth", [None] + 
+                                                       list(range(2, 11))),
+                'min_samples_split': trial.suggest_int("min_samples_split", 2, 
+                                                       20, step=2),
+                'max_features': trial.suggest_int("max_features", 3, 15),
+                'n_jobs': -1
+            }
 
-    # Perform Bayesian optimization
-    warnings.filterwarnings("ignore")
-    bayes_clf = BayesSearchCV(estimator=clf, search_spaces=space, cv=3,
-                              scoring=my_precision, n_iter=40, n_jobs=-1, 
-                              verbose=0)
-    bayes_clf.fit(X_train, y_train)
+            # Define classifier
+            mod = RandomForestClassifier(**param)
 
-    # Print best parameters
-    print(f"Best parameters: {bayes_clf.best_params_}")
-    print(f"Best score: {bayes_clf.best_score_}")
+            # Balance data, fit, make predictions, calc precision
+            X_tr_b, y_tr_b = balance_data(X_tr, y_tr)
+            mod.fit(X_tr_b, y_tr_b)
+            y_pred = mod.predict(X_vl)
+            prec = precision_score(y_vl, y_pred, average='macro')
 
-    # Get the classifier with the best parameters
-    best_clf = bayes_clf.best_estimator_
+            return prec
+
+        study = optuna.create_study(direction='maximize', 
+                                    study_name='parallel_study')
+        study.optimize(objective, n_trials=100)
+        trial = study.best_trial
+        print(f"Best precision {trial.value}")
+        print("Best Params")
+        print(trial.params)
+
+        best_clf = RandomForestClassifier(n_estimators=500, random_state=42,
+                                          **trial.params)
+
+    # Fit optimised model on balanced data
+    best_clf.fit(X_train_b, y_train_b)
 
     return best_clf
 

@@ -1,13 +1,14 @@
 #!/bin/bash -l
 #SBATCH --qos=normal
-#SBATCH --mem=1G
-#SBATCH --ntasks=10
-#SBATCH --output=/home/h04/alanyon/first_guess_TAFs/improver_ml/EGTK.out
+#SBATCH --mem=20G
+#SBATCH --ntasks=20
+#SBATCH --output=/home/h04/alanyon/first_guess_TAFs/improver_ml/ml.out
 #SBATCH --time=300
-#SBATCH --error=/home/h04/alanyon/first_guess_TAFs/improver_ml/EGTK.err
+#SBATCH --error=/home/h04/alanyon/first_guess_TAFs/improver_ml/ml.err
 
 # Data directories
-export OUTPUT_DIR=/data/users/alanyon/tafs/improver/verification/20230805-20240921_ml_testing
+export OUTPUT_DIR=/data/users/alanyon/tafs/improver/verification/20230805-20241004_ml
+export FAKE_DATE=20230923
 
 # Define pythonpath
 export PYTHONPATH=$PYTHONPATH:~alanyon/first_guess_TAFs/improver_ml/

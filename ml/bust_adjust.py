@@ -174,7 +174,7 @@ def pred_adjust(site_df, tdf, clf_models, icao, c_name):
         site_df (pandas.DataFrame): Adjusted site model data
     """
     # Get X columns from dataframe
-    X = tdf[co.PARAM_COLS]
+    X = tdf[clf_models[f'{wx_type}_{c_name}_features']]
     X = X.apply(pd.to_numeric)
 
     # Create bust predicts dataframe, starting with valid times
