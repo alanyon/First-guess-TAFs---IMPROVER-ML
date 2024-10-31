@@ -554,7 +554,7 @@ def optimise_hypers(X_train, y_train, X_train_b, y_train_b, fname, model_name,
 
             # Define search space
             param = {
-                'n_estimators': 500,
+                'n_estimators': 100,
                 'random_state': 42,
                 'max_depth': trial.suggest_categorical('max_depth', [None] + 
                                                        list(range(2, 11))),
@@ -589,7 +589,7 @@ def optimise_hypers(X_train, y_train, X_train_b, y_train_b, fname, model_name,
         def objective(trial):
 
             param = {
-                'n_estimators': 500,
+                'n_estimators': 100,
                 'random_state': 42,
                 'max_depth': trial.suggest_categorical("max_depth", [None] + 
                                                        list(range(2, 11))),
