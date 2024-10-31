@@ -463,7 +463,7 @@ def get_prec(X_train, y_train, model):
     skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
     scores = []
 
-    for tr_ind, te_ind in skf.split(X, y):
+    for tr_ind, te_ind in skf.split(X_train, y_train):
 
         # Split the data
         X_train_fold, X_test_fold = X_train[tr_ind], X_train[te_ind]
