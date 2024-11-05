@@ -184,7 +184,7 @@ def pred_adjust(site_df, tdf, clf_models, icao, c_name):
     for wx_type in ['vis', 'cld']:
 
         # Just use best features
-        X_best = X[co.BEST_FEATS[wx_type]]
+        X_best = X[clf_models[f'{wx_type}_{c_name}_features']]
 
         # Predict wx type bust labels
         pred_labels = get_labels(X_best, clf_models, wx_type, c_name)
