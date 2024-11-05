@@ -101,7 +101,7 @@ def check_mist_fog(vis, temp, rules, wx_str):
     if 'FG' in non_precip_wx and vis >= 1000:
         if vis <= 5000:
             non_precip_wx = 'BR'
-        elif vis < 9999 and rule == 'defence':
+        elif vis < 9999 and rules == 'defence':
             non_precip_wx = 'HZ'
         else:
             non_precip_wx = ''
