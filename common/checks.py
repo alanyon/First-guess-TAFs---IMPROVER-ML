@@ -110,6 +110,8 @@ def check_mist_fog(vis, temp, rules, wx_str):
             non_precip_wx = 'HZ'
         else:
             non_precip_wx = ''
+    elif 'HZ' in non_precip_wx and vis >= 9999:
+        non_precip_wx = ''
 
     # Join precip and non-precip back up into single string
     wx_codes = [non_precip_wx]
