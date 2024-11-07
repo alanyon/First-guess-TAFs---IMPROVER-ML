@@ -75,14 +75,6 @@ def main():
 
     print('icao', icao)
 
-    # To collect classifier times and scores
-    m_scores = {
-        'vis': {'Classifier': [], 'Evaluation Metric': [], 'Score': []},
-        'cld': {'Classifier': [], 'Evaluation Metric': [], 'Score': []}
-    }
-    m_times = {'vis': {'Classifier': [], 'Time': []},
-               'cld': {'Classifier': [], 'Time': []}}
-
     # To collect best features
     best_features = {}
 
@@ -115,9 +107,8 @@ def main():
             # Get models to predict bust/no bust and bust type
             clf_models, m_scores, m_times, b_features = get_clf(
                 clf_models, X_train, all_y_train, X_test, all_y_test,
-                plot_dir, bust_type, model_name, m_scores,m_times, 
-                get_features=True, optimise=True, 
-                compare_models=False
+                plot_dir, bust_type, model_name, get_features=True, 
+                optimise=True, compare_models=True
             )
 
             # Update best features
@@ -237,19 +228,16 @@ def best_features_plot(best_features, bust_type):
     plt.close()
 
 
-def get_best_features(default, default_precision, X_train, X_test, y_train, 
-                      y_test, feat_fname, model_name):
+def get_best_features(default, X_train, y_train, feat_fname, model_name):
     """
     Gets best features for classifier.
 
     Args:
         default (sklearn classifier): Default classifier
-        default_precision (float): Default precision score
         X_train (pandas.DataFrame): Training input data
-        X_test (pandas.DataFrame): Testing input data
         y_train (pandas.Series): Training target data
-        y_test (pandas.Series): Testing target data
         feat_fname (str): File path for saving plot
+        model_name (str): Classifier name
     Returns:
         best_features (list): Best features
     """
@@ -269,12 +257,12 @@ def get_best_features(default, default_precision, X_train, X_test, y_train,
 
     # Define default variables to update if necessary
     best_features = sorted_features.copy()
-    best_precision = default_precision
 
     # Get thresholds for feature selection and loop through them
     thresholds = sort(default.feature_importances_)
 
-    for thresh in thresholds:
+    # Loop through thresholds
+    for ind, thresh in enumerate(thresholds):
 
         # select features using threshold
         selection = SelectFromModel(default, threshold=thresh, prefit=True)
@@ -282,26 +270,49 @@ def get_best_features(default, default_precision, X_train, X_test, y_train,
         # Get subset of X_train using features
         select_X_train = selection.transform(X_train)
 
-        # train model
-        if model_name == 'XGBoost':
-            selection_model = XGBClassifier(random_state=42)
-        elif model_name == 'Random Forest':
-            selection_model = RandomForestClassifier(random_state=42)
-        selection_model.fit(select_X_train, y_train)
+        # Use Stratified K-Fold for cross-validation
+        skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
-        # eval model
-        select_X_test = selection.transform(X_test)
-        predictions = selection_model.predict(select_X_test)
+        # Loop through folds and get mean precision score
+        scores = []
+        for tr_ind, te_ind in skf.split(select_X_train, y_train):
+
+            # Split the data
+            X_train_fold = select_X_train[tr_ind] 
+            X_test_fold =  select_X_train[te_ind]
+            y_train_fold = y_train[tr_ind]
+            y_test_fold = y_train[te_ind]
+
+            # Balance data, fit, make predictions, calc precision
+            X_tr_b, y_tr_b = balance_data(X_train_fold, y_train_fold)
+
+            # train model
+            if model_name == 'XGBoost':
+                selection_model = XGBClassifier(random_state=42, 
+                                                n_estimators=200)
+            elif model_name == 'Random Forest':
+                selection_model = RandomForestClassifier(random_state=42,
+                                                         n_estimators=200)
+            selection_model.fit(X_tr_b, y_tr_b)
+
+            # Make predictions and score
+            y_pred = selection_model.predict(X_test_fold)
+            prec = precision_score(y_test_fold, y_pred, average='macro')
+            scores.append(prec)
+
+        # Get mean score
+        sel_prec = np.mean(scores)
 
         # Print score
-        sel_precision = precision_score(y_test, predictions, average='macro')
         print(f'Thresh={thresh}, n={select_X_train.shape[1]} '
-              f'Precision={sel_precision}')
+              f'Precision={sel_prec}')
 
-        # Update best features if more than 0.02 better
-        if round(sel_precision, 3) >= round(default_precision, 3) + 0.02:
+        # Update best features score increased
+        if ind == 0:
+            best_precision = sel_prec
+        elif sel_prec > best_precision:
             best_features = sorted_features[-select_X_train.shape[1]:]
-            best_precision = sel_precision
+            best_precision = sel_prec
 
     print(f'Best features: {best_features}')
     print(f'Best precision: {best_precision}')
@@ -310,8 +321,8 @@ def get_best_features(default, default_precision, X_train, X_test, y_train,
 
 
 def get_clf(clf_models, X_train, all_y_train, X_test, all_y_test, plot_dir,
-            bust_type, model_name, m_scores, m_times, 
-            get_features=False, optimise=False, compare_models=False):
+            bust_type, model_name, get_features=False, optimise=False, 
+            compare_models=False):
     """
     Creates classifier to predict busts.
 
@@ -348,9 +359,9 @@ def get_clf(clf_models, X_train, all_y_train, X_test, all_y_test, plot_dir,
 
     # Define default model  
     if model_name == 'XGBoost':
-        default = XGBClassifier(random_state=42, n_estimators=500)
+        default = XGBClassifier(random_state=42)
     elif model_name == 'Random Forest':
-        default = RandomForestClassifier(random_state=42, n_estimators=500)
+        default = RandomForestClassifier(random_state=42)
     elif model_name == 'Decision Tree':
         default = DecisionTreeClassifier(random_state=42)
     elif model_name == 'Gradient Boosting':
@@ -375,12 +386,14 @@ def get_clf(clf_models, X_train, all_y_train, X_test, all_y_test, plot_dir,
     cm_fname = f'{plot_dir}/cm_{bf_name}_{mf_name}_default.png'
     plot_confusion_matrix(lab_dict, y_test, default_y_pred, cm_fname)
 
+    # To add model comparison stats to if required
+    m_scores = {'Classifier': model_name, 'Param': bf_name}
+
     # Collect stats for comparing models if required
     if compare_models:
 
-        # Add time to dictionary
-        m_times[bf_name]['Classifier'].append(model_name)
-        m_times[bf_name]['Time'].append(elapsed)
+        # Add model time to dictionary
+        m_scores['Time'] = elapsed
 
         # Get required scores
         for score_name, score_func in SCORES.items():
@@ -388,28 +401,18 @@ def get_clf(clf_models, X_train, all_y_train, X_test, all_y_test, plot_dir,
             m_score_minorities = score_func(y_test, default_y_pred, 
                                             labels=[1, 2], average='micro')
             print(score_name, m_score, m_score_minorities)
-            m_scores[bf_name]['Classifier'].append(model_name)
-            m_scores[bf_name]['Evaluation Metric'].append(score_name)
-            m_scores[bf_name]['Score'].append(m_score)
-            m_scores[bf_name]['Classifier'].append(model_name)
-            min_score_name = f'{score_name} (minorities)'
-            m_scores[bf_name]['Evaluation Metric'].append(min_score_name)
-            m_scores[bf_name]['Score'].append(m_score_minorities)
+            m_scores[score_name] = m_score
+            m_scores[f'{score_name} (minorities)'] = m_score_minorities
 
     # Plot feature importance and select best features
     if get_features:
         feat_fname = f'{plot_dir}/feature_importance_{bf_name}_{mf_name}.png'
         best_features = get_best_features(
-            default, default_precision, X_train_b, X_test, y_train_b, 
-            y_test, feat_fname, model_name
+            default, X_train, y_train, feat_fname, model_name
         )
         X_train, X_train_b = X_train[best_features], X_train_b[best_features]
         X_test = X_test[best_features]
 
-        # If any features were removed, print them
-        if len(best_features) < len(X_train.columns):
-            print('Removed features:', 
-                  set(X_train.columns) - set(best_features))
     else:
         best_features = X_train.columns
 
@@ -417,9 +420,17 @@ def get_clf(clf_models, X_train, all_y_train, X_test, all_y_test, plot_dir,
     if optimise:
         fname = f'{plot_dir}/convergence_{bf_name}_{mf_name}.png'
         opt_model = optimise_hypers(X_train, y_train, X_train_b, y_train_b,
-                                    fname, model_name, lab_dict)
+                                    model_name)
     else:
-        opt_model = default
+        if model_name == 'XGBoost':
+            opt_model = XGBClassifier(random_state=42)
+        elif model_name == 'Random Forest':
+            opt_model = RandomForestClassifier(random_state=42)
+        elif model_name == 'Decision Tree':
+            opt_model = DecisionTreeClassifier(random_state=42)
+        elif model_name == 'Gradient Boosting':
+            opt_model = GradientBoostingClassifier(random_state=42)
+        opt_model.fit(X_train_b, y_train_b)
 
     # Define optimal classifier and print score
     y_pred_opt = opt_model.predict(X_test)
@@ -442,8 +453,9 @@ def get_clf(clf_models, X_train, all_y_train, X_test, all_y_test, plot_dir,
     clf_models[f'{bf_name}_{mf_name}'] = opt_model
     clf_models[f'{bf_name}_{mf_name}_label_dict'] = lab_dict
     clf_models[f'{bf_name}_{mf_name}_features'] = best_features
+    clf_models[f'{bf_name}_{mf_name}_model_scores'] = m_scores
 
-    return clf_models, m_scores, m_times, best_features
+    return clf_models, m_scores, m_times
 
 
 def get_label_dict(bust_labels):
@@ -533,15 +545,13 @@ def oob_precision(y_true, y_pred):
     return precision_score(y_true, y_pred, labels=[1, 2], average='micro')
 
 
-def optimise_hypers(X_train, y_train, X_train_b, y_train_b, fname, model_name, 
-                    lab_dict):
+def optimise_hypers(X_train, y_train, X_train_b, y_train_b, model_name):
     """
     Optimises hyperparameters for classifier.
 
     Args:
         X_train (pandas.DataFrame): Training input data
         y_train (pandas.Series): Training target data
-        fname (str): File path for saving plot
         model_name (str): Classifier name
     Returns:
         model (sklearn classifier): Optimised classifier
@@ -554,8 +564,10 @@ def optimise_hypers(X_train, y_train, X_train_b, y_train_b, fname, model_name,
 
             # Define search space
             param = {
-                'n_estimators': 100,
                 'random_state': 42,
+                'verbosity': 0,
+                'n_estimators': trial.suggest_int("n_estimators", 100, 500,
+                                                  step=100),
                 'max_depth': trial.suggest_categorical('max_depth', [None] + 
                                                        list(range(2, 11))),
                 'learning_rate': trial.suggest_float('learning_rate', 0.01, 
@@ -573,15 +585,20 @@ def optimise_hypers(X_train, y_train, X_train_b, y_train_b, fname, model_name,
 
             return mean_prec_score
 
-        study = optuna.create_study(direction='maximize', 
-                                    study_name='parallel_study')
+        # Define default model and get precision score
+        default_mod = XGBClassifier(random_state=42, verbosity=0)
+        default_score = get_prec(X_train_b, y_train_b, default_mod)
+
+        # Run optimisation
+        study = optuna.create_study(direction='maximize')
         study.optimize(objective, n_trials=50)
         trial = study.best_trial
-        print(f"Best precision {trial.value}")
-        print("Best Params")
-        print(trial.params)
 
-        best_clf = XGBClassifier(random_state=42, verbosity=0, **trial.params)
+        # Choose best model
+        if trial.value > default_score:
+            best_clf = XGBClassifier(**trial.params)
+        else:
+            best_clf = default_mod
 
     # For Random Forest
     elif model_name == 'Random Forest':
@@ -589,8 +606,9 @@ def optimise_hypers(X_train, y_train, X_train_b, y_train_b, fname, model_name,
         def objective(trial):
 
             param = {
-                'n_estimators': 100,
                 'random_state': 42,
+                'n_estimators': trial.suggest_int("n_estimators", 100, 500,
+                                                  step=100),
                 'max_depth': trial.suggest_categorical("max_depth", [None] + 
                                                        list(range(2, 11))),
                 'min_samples_split': trial.suggest_int("min_samples_split", 2, 
@@ -607,16 +625,21 @@ def optimise_hypers(X_train, y_train, X_train_b, y_train_b, fname, model_name,
 
             return mean_prec_score
 
+        # Define default model and get precision score
+        default_mod = RandomForestClassifier(random_state=42)
+        default_score = get_prec(X_train_b, y_train_b, default_mod)
+
+        # Run optimisation                         
         study = optuna.create_study(direction='maximize', 
                                     study_name='parallel_study')
         study.optimize(objective, n_trials=50)
         trial = study.best_trial
-        print(f"Best precision {trial.value}")
-        print("Best Params")
-        print(trial.params)
-
-        best_clf = RandomForestClassifier(n_estimators=500, random_state=42,
-                                          **trial.params)
+        
+        # Choose best model
+        if trial.value > default_score:
+            best_clf = RandomForestClassifier(**trial.params)
+        else:
+            best_clf = default_mod
 
     # Fit optimised model on balanced data
     best_clf.fit(X_train_b, y_train_b)
