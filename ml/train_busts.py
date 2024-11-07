@@ -111,47 +111,12 @@ def main():
                 optimise=True, compare_models=True
             )
 
-            # Update best features
-            icao_best_features[bust_type] = b_features
-
-    # Add best features to dictionary
-    best_features[icao] = icao_best_features
-
     bl_data = [test_data, clf_models]
     bl_fname = f'{OUTPUT_DIR}/pickles/clfs_data_{icao}'
 
     # Pickle files including bust label classifier models
     with open(bl_fname, 'wb') as f_object:
         pickle.dump(bl_data, f_object)
-
-    # # Pickle/unpickle best features
-    # fname = f'{OUTPUT_DIR}/pickles/best_features'
-    # best_features = pickle_unpickle(best_features, fname)
-
-    # # Pickle/unpickle classifier model scores
-    # fname = f'{OUTPUT_DIR}/pickles/model_scores_times'
-    # m_data = [m_scores, m_times]
-    # m_scores, m_times = pickle_unpickle(m_data, fname)
-
-    # # TESTING ######################################
-    # with open(f'{OUTPUT_DIR}/pickles/model_scores_times', 'rb') as file_object:
-    #     unpickler = pickle.Unpickler(file_object)
-    #     m_scores, m_times = unpickler.load()
-    # # TESTING ######################################
-
-    # # Make some plots comparing classifiers
-    # for param in ['vis', 'cld']:
-    #     plot_model_scores(m_scores[param], param)
-    #     plot_model_times(m_times[param], param)
-
-#    # TESTING ######################################
-#     with open(f'{OUTPUT_DIR}/pickles/best_features', 'rb') as file_object:
-#         unpickler = pickle.Unpickler(file_object)
-#         best_features = unpickler.load()
-#     # TESTING ######################################
-
-#     best_features_plot(best_features, 'vis_bust_label')
-#     best_features_plot(best_features, 'cld_bust_label')
 
 
 def balance_data(X_train, y_train):
