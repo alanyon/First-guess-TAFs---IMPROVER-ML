@@ -105,7 +105,7 @@ def main():
         for model_name in CLASSIFIERS:
 
             # Get models to predict bust/no bust and bust type
-            clf_models, m_scores, m_times, b_features = get_clf(
+            clf_models = get_clf(
                 clf_models, X_train, all_y_train, X_test, all_y_test,
                 plot_dir, bust_type, model_name, get_features=True, 
                 optimise=True, compare_models=True
@@ -455,7 +455,7 @@ def get_clf(clf_models, X_train, all_y_train, X_test, all_y_test, plot_dir,
     clf_models[f'{bf_name}_{mf_name}_features'] = best_features
     clf_models[f'{bf_name}_{mf_name}_model_scores'] = m_scores
 
-    return clf_models, m_scores, m_times
+    return clf_models
 
 
 def get_label_dict(bust_labels):
