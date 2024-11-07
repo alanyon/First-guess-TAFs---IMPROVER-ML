@@ -592,11 +592,10 @@ def optimise_hypers(X_train, y_train, X_train_b, y_train_b, model_name):
 
         # Define default model and get precision score
         default_mod = RandomForestClassifier(random_state=42)
-        default_score = get_prec(X_train_b, y_train_b, default_mod)
+        default_score = get_prec(X_train, y_train, default_mod)
 
         # Run optimisation                         
-        study = optuna.create_study(direction='maximize', 
-                                    study_name='parallel_study')
+        study = optuna.create_study(direction='maximize')
         study.optimize(objective, n_trials=50)
         trial = study.best_trial
         
