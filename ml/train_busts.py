@@ -552,7 +552,7 @@ def optimise_hypers(X_train, y_train, X_train_b, y_train_b, model_name):
 
         # Define default model and get precision score
         default_mod = XGBClassifier(random_state=42, verbosity=0)
-        default_score = get_prec(X_train_b, y_train_b, default_mod)
+        default_score = get_prec(X_train, y_train, default_mod)
 
         # Run optimisation
         study = optuna.create_study(direction='maximize')
