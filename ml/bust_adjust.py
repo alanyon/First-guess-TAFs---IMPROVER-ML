@@ -22,6 +22,7 @@ import pandas as pd
 
 import common.calculations as ca
 import common.configs as co
+import data_extraction.extract_sort_data as ex
 import generate.generate_taf as ge
 import ml.data_sorting as ds
 
@@ -236,6 +237,9 @@ def update_taf(tdf, site_df, clf_models, clf_type):
 
         # Update ml dataframe
         tdf = ds.get_ml_df(site_df)
+
+    # Ensure sig wx still sensible with new visibilities - adjust if not
+    site_df['sig_wx'] = site_df.apply(ex.update_sig_wx_for_new_vis, axis=1)
 
     # Generate new TAF and write to text file
     new_taf = ge.taf_gen(site_df)

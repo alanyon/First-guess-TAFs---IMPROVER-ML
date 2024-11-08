@@ -17,6 +17,7 @@ Functions:
     round_dir: Rounds wind direction to nearest 10 degrees.
     round_vis_row: Rounds vis appropriately on row of dataframe.
     update_sig_wx: Converts sig wx codes to TAF-specific strings.
+    update_sig_wx_for_new_vis: Updates sig wx based on new visibilities.
     update_values: Updates IMPROVER values.
     update_vis: Checks visibility lines up with cloud, wind and sig wx.
     vis_cat_row: Determines visibility TAF category based on vis value.
@@ -769,6 +770,23 @@ def update_sig_wx(row):
     # Ensure appropriate mist/fog code used
     wx_str = ch.check_mist_fog(row['vis'], row['temp'], row['rules_col'],
                                wx_str)
+
+    return wx_str
+
+
+def update_sig_wx_for_new_vis(row):
+    """
+    Similar to update_sig_wx, but only updates sig wx code based on new
+    visibilities.
+
+    Args:
+        row (pandas.Series): Row of dataframe
+    Return:
+        wx_str (str): Sig wx code
+    """
+    # Ensure appropiate wx code is used based on visibility
+    wx_str = ch.vis_based_wx(row['vis'], row['temp'], row['rules_col'],
+                             row['sig_wx'])
 
     return wx_str
 

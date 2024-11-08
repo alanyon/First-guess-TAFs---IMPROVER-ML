@@ -11,6 +11,7 @@ Functions:
     dir_change: Checks if difference in wind direction significant.
     gust_change: Checks for significant gust changes.
     mean_change: Checks for significant wind mean changes.
+    vis_based_wx: Adjusts wx codes based on visibility.
     vis_change: Checks for significant visibility changes.
 """
 import common.calculations as ca
@@ -430,6 +431,77 @@ def mean_change(mean_1, mean_2, rules):
         change = change and max(mean_1, mean_2) >= 15
 
     return change
+
+
+def vis_based_wx(vis, temp, rules, sig_wx):
+    """
+    Adjusts wx codes based on visibility.
+
+    Args:
+        vis (int): Visibility
+        temp (float): Air temperature
+        rules (str): TAF rules for airport
+        sig_wx (str): Significant weather code
+    Returns:
+        sig_wx (str): Updated significant weather code
+    """
+    # Get precip and non-precip codes from string
+    precip_wx, non_precip_wx = '', ''
+    for wx_code in sig_wx.split():
+        if wx_code in co.PRECIP_CODES:
+            precip_wx += wx_code
+        else:
+            non_precip_wx += wx_code
+
+    # Determine precip rate
+    rate = ca.get_rate(precip_wx)
+
+    # Define rates used
+    test_rates = ['light', 'moderate', 'heavy']
+
+    # If any precip code, check rates
+    if precip_wx:
+
+        # Covers all codes including rain
+        if 'RA' in sig_wx:
+
+            # Covers RASN and SHRASN
+            if 'SN' in sig_wx:
+                threshs = [9000, 4500, 2500]
+
+            # Covers all other rain codes
+            else:
+                threshs = [9999, 8000, 4000]
+
+        # Covers SN and SHSN
+        elif 'SN' in sig_wx:
+            threshs = [6000, 2000, 800]
+
+        # Covers SHGS (not sure of good max value here) and DZ
+        elif any(ele in sig_wx for ele in ['GS', 'DZ']):
+            threshs = [8000, 5000, 1500]
+
+        # Update precip rate if necessary
+        if vis >= threshs[0]:
+            precip_wx = ''
+        elif rate == 'moderate' and vis >= threshs[1]:
+            precip_wx = f'-{precip_wx}'
+        elif rate == 'heavy' and vis >= threshs[2]:
+            if vis >= threshs[1]:
+                precip_wx = precip_wx.replace('+', '-')
+            else:
+                precip_wx = precip_wx.replace('+', '')
+
+    # Join precip and non-precip back up into single string
+    wx_codes = [non_precip_wx]
+    if precip_wx:
+        wx_codes.insert(0, precip_wx)
+    sig_wx = ' '.join(wx_codes)
+
+    # Check mist/fog
+    sig_wx = check_mist_fog(vis, temp, rules, sig_wx)
+
+    return sig_wx
 
 
 def vis_change(old_cat, new_cat):
