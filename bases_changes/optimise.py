@@ -122,19 +122,37 @@ def add_cb(groups, site_data):
     return new_groups
 
 
-def check_periods(comb):
+def check_periods(comb, probs_tempos):
     """
     Checks if change periods allow for merging, returning new change
     period if so.
 
     Args:
         comb (tuple): Combination of change groups
+        probs_tempos (list): PROB/TEMPO groups
     Returns:
         new_period (list): New change period
     """
+    # Get all dts covered by groups in comb
+    dts = list(itertools.chain(*[grp['change_period'] for grp in comb]))
+
+    # Get any other overlapping groups
+    for grp in probs_tempos:
+
+        # Ignore groups in comb
+        if grp in comb:
+            continue
+
+        # Get dts covering group
+        o_dts = ca.get_period_dts(grp['change_period'])
+
+        # Add to comb if overlapping
+        if list(set(o_dts).intersection(dts)):
+            comb.append(grp)
+            dts.extend(o_dts)
+
     # Get earliest and latest times from groups in comb to define
     # potential new period
-    dts = list(itertools.chain(*[grp['change_period'] for grp in comb]))
     new_period = [min(dts), max(dts)]
 
     # Simplest case is when all groups are over exactly the same period,
@@ -350,7 +368,7 @@ def combine_overlaps(groups):
                 continue
 
             # Check if periods of groups compatible for merging
-            new_period = check_periods(comb)
+            new_period = check_periods(list(comb), probs_tempos)
 
             # Move to next combination if merging not possible
             if new_period is None:

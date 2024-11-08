@@ -4,54 +4,63 @@ generated TAFs will go bust.
 
 Functions:
     main: Main function.
-    get_clf_binary: Creates binary classifier.
-    get_clf_label: Creates classifier for bust labels.
-    get_df: Concatenates dataframes.
-    get_model: Gets optimal classifier and plots results.
-    predict_btypes: Predicts bust types given busts.
-    train_test: Splits data into training and testing sets.
+    get_clf: Creates classifier to predict bust labels.
+    get_xy: Concatenates dataframes and separates into X/y.
+    pickle_unpickle: Pickles and unpickles data.
+    plot_confusion_matrix: Plots confusion matrix.
+    plot_model_scores: Plots classifier evaluation metrics.
+    plot_model_times: Plots classifier processing times.
+    split_data: Splits data into training and testing sets.
 
 Written by Andre Lanyon
 """
-import itertools
 import os
+import numpy as np
+from numpy import sort
 import pickle
-from datetime import datetime
 import time
 
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 import seaborn as sns
 from imblearn.over_sampling import SMOTE
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
-from sklearn.svm import SVC
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.feature_selection import RFECV
-from sklearn.metrics import (accuracy_score, average_precision_score,
-                             confusion_matrix, f1_score, precision_score,
+from imblearn.combine import SMOTETomek
+import optuna
+from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
+from sklearn.metrics import (confusion_matrix, f1_score, precision_score,
                              recall_score)
+from sklearn.feature_selection import SelectFromModel
 from sklearn.model_selection import RandomizedSearchCV, train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.preprocessing import StandardScaler
+from skopt.space import Real, Integer
+from skopt.utils import use_named_args
+from skopt import gp_minimize, dummy_minimize, BayesSearchCV
+from skopt.plots import plot_convergence
+from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import StratifiedKFold
 from xgboost import XGBClassifier
+import warnings
 
-import ml.bust_adjust as ba
 import common.configs as co
+import ml.bust_adjust as ba
 
 # Import environment variables
 OUTPUT_DIR = os.environ['OUTPUT_DIR']
+FAKE_DATE = os.environ['FAKE_DATE']
 
-SCORES = {'Accuracy': accuracy_score, 'F1 score': f1_score,
-          'Recall': recall_score, 'Precision': precision_score}
-CLASSIFIERS = {
-    'Random Forest': RandomForestClassifier(random_state=42),
-    'XGBoost': XGBClassifier(random_state=42),
-    'Decision Tree': DecisionTreeClassifier(random_state=42),
-    'Gradient Boosting': GradientBoostingClassifier(random_state=42),
-    'SVC': SVC(kernel="rbf", C=0.025, probability=True, random_state=42),    
-    }
+# Other constants
+SCORES = {'F1 score': f1_score, 'Recall': recall_score, 
+          'Precision': precision_score}
+# CLASSIFIERS = ['Random Forest']
+CLASSIFIERS = ['XGBoost', 'Random Forest']
 
 # Seaborn settings
 sns.set_style('darkgrid')
+
+# Suppress FutureWarnings
+warnings.filterwarnings("ignore")
 
 
 def main():
@@ -61,363 +70,545 @@ def main():
     # Turn off pandas 'chained' warning
     pd.options.mode.chained_assignment = None
 
-    # To collect classifier times and scores
-    m_scores = {'Classifier': [], 'Evaluation Metric': [], 'Score': []}
-    m_times = {'Classifier': [], 'Time': []}
+    # Get icao from date icao dictionary
+    icao = co.DATE_ICAOS[FAKE_DATE]
 
-    # Create classifiers for each airport
-    # for icao in co.ML_ICAOS:
-    for icao in ['EGLL']:
+    print('icao', icao)
 
-        print(f'Training models for {icao}')
+    # To collect best features
+    best_features = {}
 
-        # Directory to send plots to
-        plot_dir = f'{OUTPUT_DIR}/ml_plots/{icao}'
-        if not os.path.exists(plot_dir):
-            os.makedirs(plot_dir)
+    # Directory to send plots to
+    plot_dir = f'{OUTPUT_DIR}/ml_plots/{icao}'
+    if not os.path.exists(plot_dir):
+        os.makedirs(plot_dir)
 
-        # Unpickle data
-        i_pickle = f'{OUTPUT_DIR}/pickles/pickle_{icao}'
-        with open(i_pickle, 'rb') as file_object:
-            unpickler = pickle.Unpickler(file_object)
-            taf_data = unpickler.load()
+    # Unpickle data
+    i_pickle = f'{OUTPUT_DIR}/pickles/pickle_{icao}'
+    with open(i_pickle, 'rb') as file_object:
+        unpickler = pickle.Unpickler(file_object)
+        taf_data = unpickler.load()
 
-        # Split data into train/test and oversample using SMOTE
-        (X_train, all_y_train, X_test, all_y_test, 
-         lab_dict, testing_data) = split_data(taf_data)
+    # Split data into train/test
+    X_train, all_y_train, X_test, all_y_test, test_data = split_data(
+        taf_data
+    )
 
-        # # Try different classifiers on any bust model
-        # m_scores, m_times = try_models(X_train, y_train, X_test, y_test, 
-        #                                plot_dir, lab_dict, m_scores, m_times)       
+    # To collect classifier models in
+    clf_models = {}
 
-        # To collect classifier models in
-        clf_models = {}
+    # Create classifier for each bust type
+    icao_best_features = {}
+    for bust_type in co.BUST_COLS:
 
-        # Get model to predict bust/no bust
-        clf_models, test_df = get_clf_binary(
-            clf_models, X_train, all_y_train, X_test, all_y_test, lab_dict,
-            plot_dir
-        )
+        # Loop through all classifiers to test
+        for model_name in CLASSIFIERS:
 
-        # Pickle/unpickle any bust classifier models
-        ab_data = [testing_data, test_df, clf_models]
-        ab_fname = f'{OUTPUT_DIR}/pickles/any_bust_{icao}'
-        testing_data, test_df, clf_models = pickle_unpickle(ab_data, ab_fname)
+            # Get models to predict bust/no bust and bust type
+            clf_models = get_clf(
+                clf_models, X_train, all_y_train, X_test, all_y_test,
+                plot_dir, bust_type, model_name, get_features=True, 
+                optimise=True, compare_models=True
+            )
 
-        # # TESTING ######################################
-        # with open(f'{OUTPUT_DIR}/pickles/any_bust_{icao}', 'rb') as file_object:
-        #     unpickler = pickle.Unpickler(file_object)
-        #     testing_data, test_df, clf_models = unpickler.load()
-        # # TESTING ######################################
+    bl_data = [test_data, clf_models]
+    bl_fname = f'{OUTPUT_DIR}/pickles/clfs_data_{icao}'
 
-        # Subset data with just rows where busts have occurred
-        train_df = pd.concat([X_train, all_y_train], axis=1)
-        train_just_busts = train_df[train_df['any_bust'] == 'bust']
-        test_just_busts = test_df[test_df['any_bust'] == 'bust']
- 
-        # Get models to predict type of bust, given bust
-        clf_models = get_clf_labels(clf_models, train_just_busts, 
-                                    test_just_busts, plot_dir)
-    
-        # Pickle/unpickle files including bust label classifier models
-        bl_data = [testing_data, test_df, clf_models]
-        bl_fname = f'{OUTPUT_DIR}/pickles/bust_label_{icao}'
-        testing_data, test_df, clf_models = pickle_unpickle(bl_data, bl_fname)
-
-        # # TESTING ######################################
-        # with open(f'{OUTPUT_DIR}/pickles/bust_label_{icao}', 'rb') as file_object:
-        #     unpickler = pickle.Unpickler(file_object)
-        #     testing_data, test_df, clf_models = unpickler.load()
-        # # TESTING ######################################
-
-        # Predict bust/no bust, then each bust type
-        predict_btypes(test_df, clf_models, plot_dir)
-
-        print('Finished')
-        exit()
-
-        # Use classifiers to predict bust labels and re-write TAFs
-        for (tdf, site_df) in testing_data:
-            ba.update_taf(tdf, site_df, clf_models, icao)
-
-    # Pickle/unpickle classifier model scores
-    fname = f'{OUTPUT_DIR}/pickles/model_scores_times'
-    m_data = [m_scores, m_times]
-    m_scores, m_times = pickle_unpickle(m_data, fname)
-
-    # # TESTING ######################################
-    # with open(f'{OUTPUT_DIR}/pickles/model_scores_times', 'rb') as file_object:
-    #     unpickler = pickle.Unpickler(file_object)
-    #     m_scores, m_times = unpickler.load()
-    # # TESTING ######################################
-
-    # Make some plots comparing classifiers
-    plot_model_scores(m_scores)
-    plot_model_times(m_times)   
+    # Pickle files including bust label classifier models
+    with open(bl_fname, 'wb') as f_object:
+        pickle.dump(bl_data, f_object)
 
 
-def get_clf_binary(clf_models, X_train, all_y_train, X_test, all_y_test, 
-                   lab_dict, plot_dir):
+def balance_data(X_train, y_train):
     """
-    Creates required binary classifier (bust/no bust).
+    Balances data using SMOTE and Tomek links.
 
-    Args:  
+    Args:
+        X_train (pandas.DataFrame): Training input data
+        y_train (pandas.Series): Training target data
+    Returns:
+        X_train (pandas.DataFrame): Balanced training input data
+        y_train (pandas.Series): Balanced training target data
+    """
+    # Ensure k_neighbors is smaller than the smallest class
+    class_counts = y_train.value_counts()
+    k_neighbors = min([min(class_counts) - 1, 5])
+
+    # Oversample minority class using SMOTE and clean using Tomek links
+    smt = SMOTETomek(random_state=8, smote=SMOTE(k_neighbors=k_neighbors))
+    X_train, y_train = smt.fit_resample(X_train, y_train)
+
+    return X_train, y_train
+
+
+def best_features_plot(best_features, bust_type):
+    """
+    Plots best features for bust type.
+
+    Args:
+        best_features (dict): Best features
+        bust_type (str): Bust type
+    Returns:
+        None
+    """
+    # Get all features chosen for bust type
+    b_type_features = [list(best_features[icao][bust_type]) 
+                       for icao in best_features]
+
+    # Flatten list of lists
+    all_features = [feature for sublist in b_type_features 
+                    for feature in sublist]
+
+    # Count occurrences of each feature
+    feature_counts = {feature: all_features.count(feature) 
+                      for feature in all_features}
+
+    # Calculate percentage of occasions each feature appears
+    total_occasions = len(b_type_features)
+    feature_occasions = {feature: all_features.count(feature) / total_occasions * 100 
+                         for feature in all_features}
+
+    # Sort dictionary by value
+    feature_occasions = dict(sorted(feature_occasions.items(), 
+                                    key=lambda item: item[1], reverse=True))
+
+    # Rearrange for seaborn plot
+    perc_features = {'Feature': list(feature_occasions.keys()),
+                     'Percentage': list(feature_occasions.values())}
+
+    # Add in features that weren't chosen
+    for feature in co.PARAM_COLS:
+        if feature not in perc_features['Feature']:
+            perc_features['Feature'].append(feature)
+            perc_features['Percentage'].append(0)
+
+    # Create figure and axis
+    fig, ax = plt.subplots(figsize=(9, 6))
+
+    # Plot feature importances
+    sns.barplot(data=perc_features, x='Percentage', y='Feature', ax=ax)
+
+    plt.tight_layout()
+    fig.savefig(f'{OUTPUT_DIR}/ml_plots/best_features_{bust_type}.png')
+    plt.close()
+
+
+def get_best_features(default, X_train, y_train, feat_fname, model_name):
+    """
+    Gets best features for classifier.
+
+    Args:
+        default (sklearn classifier): Default classifier
+        X_train (pandas.DataFrame): Training input data
+        y_train (pandas.Series): Training target data
+        feat_fname (str): File path for saving plot
+        model_name (str): Classifier name
+    Returns:
+        best_features (list): Best features
+    """
+    # Indices of sorted feature importances
+    sorted_idx = default.feature_importances_.argsort()
+
+    # Get sorted features
+    sorted_features = X_train.columns[sorted_idx]
+
+    # Make plot of feature importances
+    fig, ax = plt.subplots()
+    ax.barh(sorted_features, default.feature_importances_[sorted_idx])
+    ax.set_xlabel("Feature Importance")
+    plt.tight_layout()
+    fig.savefig(feat_fname)
+    plt.close()
+
+    # Define default variables to update if necessary
+    best_features = sorted_features.copy()
+
+    # Get thresholds for feature selection and loop through them
+    thresholds = sort(default.feature_importances_)
+
+    # Loop through thresholds
+    for ind, thresh in enumerate(thresholds):
+
+        # select features using threshold
+        selection = SelectFromModel(default, threshold=thresh, prefit=True)
+
+        # Get subset of X_train using features
+        select_X_train = selection.transform(X_train)
+
+        # Use Stratified K-Fold for cross-validation
+        skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+
+        # Loop through folds and get mean precision score
+        scores = []
+        for tr_ind, te_ind in skf.split(select_X_train, y_train):
+
+            # Split the data
+            X_train_fold = select_X_train[tr_ind] 
+            X_test_fold =  select_X_train[te_ind]
+            y_train_fold = y_train[tr_ind]
+            y_test_fold = y_train[te_ind]
+
+            # Balance data, fit, make predictions, calc precision
+            X_tr_b, y_tr_b = balance_data(X_train_fold, y_train_fold)
+
+            # train model
+            if model_name == 'XGBoost':
+                selection_model = XGBClassifier(random_state=42, 
+                                                n_estimators=200)
+            elif model_name == 'Random Forest':
+                selection_model = RandomForestClassifier(random_state=42,
+                                                         n_estimators=200)
+            selection_model.fit(X_tr_b, y_tr_b)
+
+            # Make predictions and score
+            y_pred = selection_model.predict(X_test_fold)
+            prec = precision_score(y_test_fold, y_pred, average='macro')
+            scores.append(prec)
+
+        # Get mean score
+        sel_prec = np.mean(scores)
+
+        # Print score
+        print(f'Thresh={thresh}, n={select_X_train.shape[1]} '
+              f'Precision={sel_prec}')
+
+        # Update best features score increased
+        if ind == 0:
+            best_precision = sel_prec
+        elif sel_prec > best_precision:
+            best_features = sorted_features[-select_X_train.shape[1]:]
+            best_precision = sel_prec
+
+    print(f'Best features: {best_features}')
+    print(f'Best precision: {best_precision}')
+
+    return best_features
+
+
+def get_clf(clf_models, X_train, all_y_train, X_test, all_y_test, plot_dir,
+            bust_type, model_name, get_features=False, optimise=False, 
+            compare_models=False):
+    """
+    Creates classifier to predict busts.
+
+    Args:
         clf_models (dict): Classifier dictionary
         X_train (pandas.DataFrame): Training input data
         y_train (pandas.Series): Training target data
         X_test (pandas.DataFrame): Testing input data
         y_test (pandas.Series): Testing target data
         all_y_test (pandas.DataFrame): Testing target data including bust text
-        lab_dict (dict): Label dictionary
         plot_dir (str): Directory to save plots to
+        bust_type (str): Bust type
+        model_name (str): Classifier name
+        m_scores (dict): Model scores
+        m_times (dict): Model processing times
     Returns:
         clf_models (dict): Classifier dictionary
-        test_df (pandas.DataFrame): Testing data
+        m_scores (dict): Updated model scores
+        m_times (dict): Updated model processing times
     """
-    # Train model, optimising hyperparameters
-    y_train = all_y_train['bust_class']
-    y_test = all_y_test['bust_class']
-    model, y_pred, pred_labels = get_model(X_train, y_train, X_test, y_test, 
-                                           'any_bust', plot_dir, lab_dict)
+    # Shortened/simplified names for fnames, etc
+    mf_name = model_name.replace(' ', '_').lower()
+    bf_name = bust_type.split('_')[0]
 
-    # Add required columns
-    test_df = pd.concat([X_test, all_y_test], axis=1)
-    test_df['bust_predicts'] = pred_labels
-    test_df['bust_class_predicts'] = y_pred
+    # Get label dictionary
+    lab_dict = get_label_dict(all_y_train[bust_type])
 
-    # Add classifier and label dictionary to classifier dictionary
-    clf_models['all'] = model
-    clf_models['all_label_dict'] = lab_dict
+    # Get class integers based on lab_dict
+    y_train = all_y_train[bust_type].map(lab_dict)
+    y_test = all_y_test[bust_type].map(lab_dict)
 
-    return clf_models, test_df
+    # Oversample minority class using SMOTE and clean using Tomek links
+    X_train_b, y_train_b = balance_data(X_train, y_train)
 
+    # Define default model  
+    if model_name == 'XGBoost':
+        default = XGBClassifier(random_state=42)
+    elif model_name == 'Random Forest':
+        default = RandomForestClassifier(random_state=42)
+    elif model_name == 'Decision Tree':
+        default = DecisionTreeClassifier(random_state=42)
+    elif model_name == 'Gradient Boosting':
+        default = GradientBoostingClassifier(random_state=42)
 
-def get_clf_labels(clf_models, train_df, test_df, plot_dir):
-    """
-    Creates classifier for bust labels (e.g. wind too low, wind too
-    high, etc).
+    # Train model and get time      
+    start = time.time()
+    warnings.filterwarnings("ignore")
+    default.fit(X_train_b, y_train_b)
+    end = time.time()
+    elapsed = end - start
+    print(f'\nElapsed time for {model_name}: {elapsed:.2f} seconds')
 
-    Args:
-        clf_models (dict): Classifier dictionary
-        tdf (pandas.DataFrame): Model data
-        plot_dir (str): Directory to save images to
-    Returns:
-        clf_models (dict): Classifier dictionary
-    """
-    # Use all columns except bust_labels/classes for X
-    X_train = train_df[co.PARAM_COLS]
-    y_train_all = train_df[co.ALL_BUST_COLS]
-    X_test = test_df[co.PARAM_COLS]
-    y_test_all = test_df[co.ALL_BUST_COLS]
+    # Get default precision score
+    default_y_pred = default.predict(X_test)
+    default_precision = precision_score(y_test, default_y_pred, 
+                                        average='macro')
+    # f1 = f1_score(y_test, default_y_pred, average='macro')
+    print('Score before optimisation:', default_precision)
 
-    # Create classifier for each bust type
-    for bust_type in co.BUST_COLS:
+    # Plot confusion matrix
+    cm_fname = f'{plot_dir}/cm_{bf_name}_{mf_name}_default.png'
+    plot_confusion_matrix(lab_dict, y_test, default_y_pred, cm_fname)
 
-        # Create columns of class integers based on bust labels
-        labels = list(pd.unique(y_train_all[bust_type]))
-        if 'no_bust' in labels:
-            labels.remove('no_bust')
-        lab_dict = dict({'no_bust': 0},
-                        **{label: ind + 1 for ind, label in enumerate(labels)})
+    # To add model comparison stats to if required
+    m_scores = {'Classifier': model_name, 'Param': bf_name}
 
-        # Get integer classes for training and testing
-        y_train = y_train_all[bust_type].map(lab_dict)
-        y_test = y_test_all[bust_type].map(lab_dict)
+    # Collect stats for comparing models if required
+    if compare_models:
 
-        # # Ensure enough data for each label
-        # if any(len(tdf[tdf[bust_type] == label]) < 4 for label in lab_dict):
-        #     clf_models[bust_type.split('_')[0]] = None
-        #     continue
+        # Add model time to dictionary
+        m_scores['Time'] = elapsed
 
-        # Train model, testing for parameters, etc, if required
-        model, _, _ = get_model(X_train, y_train, X_test, y_test, 
-                                bust_type, plot_dir, lab_dict)
+        # Get required scores
+        for score_name, score_func in SCORES.items():
+            m_score = score_func(y_test, default_y_pred, average='macro')
+            m_score_minorities = score_func(y_test, default_y_pred, 
+                                            labels=[1, 2], average='micro')
+            print(score_name, m_score, m_score_minorities)
+            m_scores[score_name] = m_score
+            m_scores[f'{score_name} (minorities)'] = m_score_minorities
 
-        # Add classifier and label dictionary to classifier dictionary
-        clf_models[bust_type.split('_')[0]] = model
-        clf_models[bust_type.split('_')[0] + '_label_dict'] = lab_dict
+    # Plot feature importance and select best features
+    if get_features:
+        feat_fname = f'{plot_dir}/feature_importance_{bf_name}_{mf_name}.png'
+        best_features = get_best_features(
+            default, X_train, y_train, feat_fname, model_name
+        )
+        X_train, X_train_b = X_train[best_features], X_train_b[best_features]
+        X_test = X_test[best_features]
+
+    else:
+        best_features = X_train.columns
+
+    # Optimise hyperparameters
+    if optimise:
+        fname = f'{plot_dir}/convergence_{bf_name}_{mf_name}.png'
+        opt_model = optimise_hypers(X_train, y_train, X_train_b, y_train_b,
+                                    model_name)
+    else:
+        if model_name == 'XGBoost':
+            opt_model = XGBClassifier(random_state=42)
+        elif model_name == 'Random Forest':
+            opt_model = RandomForestClassifier(random_state=42)
+        elif model_name == 'Decision Tree':
+            opt_model = DecisionTreeClassifier(random_state=42)
+        elif model_name == 'Gradient Boosting':
+            opt_model = GradientBoostingClassifier(random_state=42)
+        opt_model.fit(X_train_b, y_train_b)
+
+    # Define optimal classifier and print score
+    y_pred_opt = opt_model.predict(X_test)
+    opt_precision =  precision_score(y_test, y_pred_opt, average='macro')
+    # f1 = f1_score(y_test, y_pred_opt, average='macro')
+    print('Score after optimisation:', opt_precision)
+
+    # Print which model got the better score
+    if opt_precision > default_precision:
+        print('Optimised model better')
+    else:
+        print('Default model better')
+
+    # Plot confusion matrix
+    fname = f'{plot_dir}/cm_{bf_name}_{mf_name}_opt.png'
+    plot_confusion_matrix(lab_dict, y_test, y_pred_opt, fname)
+
+    # Add classifier to dictionary
+    bf_name = bust_type.split('_')[0]
+    clf_models[f'{bf_name}_{mf_name}'] = opt_model
+    clf_models[f'{bf_name}_{mf_name}_label_dict'] = lab_dict
+    clf_models[f'{bf_name}_{mf_name}_features'] = best_features
+    clf_models[f'{bf_name}_{mf_name}_model_scores'] = m_scores
 
     return clf_models
 
 
-def get_df(t_data, return_label_dict=False):
+def get_label_dict(bust_labels):
+
+    labels = list(pd.unique(bust_labels))
+    if 'no_bust' in labels:
+        labels.remove('no_bust')
+    lab_dict = dict({'no_bust': 0},
+                    **{label: ind + 1 for ind, label in enumerate(labels)})
+
+    return lab_dict
+
+
+def get_prec(X_train, y_train, mod):
+
+    # Use Stratified K-Fold for cross-validation
+    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    scores = []
+
+    for tr_ind, te_ind in skf.split(X_train, y_train):
+
+        # Split the data
+        X_train_fold, X_test_fold = X_train.iloc[tr_ind], X_train.iloc[te_ind]
+        y_train_fold, y_test_fold = y_train.iloc[tr_ind], y_train.iloc[te_ind]
+
+        # Balance data, fit, make predictions, calc precision
+        X_tr_b, y_tr_b = balance_data(X_train_fold, y_train_fold)
+
+        # Fit model
+        mod.fit(X_tr_b, y_tr_b)
+
+        # Make predictions and score
+        y_pred = mod.predict(X_test_fold)
+        prec = precision_score(y_test_fold, y_pred, average='macro')
+        scores.append(prec)
+
+    mean_score = np.mean(scores)
+
+    return mean_score
+
+
+def get_xy(t_data):
     """
-    Concatenates and edits dataframes.
+    Concatenates dataframe and separates into X/y.
 
     Args:
         t_data (list): List of various data
-        return_label_dict (bool): Indicator for whether to return 
-                                  label dictionary. Defaults to False.
     Returns:
         X (pandas.DataFrame): X data
-        all_y (pandas.DataFrame): All y data 
-        lab_dict (dict): Label dictionary   
+        all_y (pandas.DataFrame): All y data
     """
     # Concatenate dataframes in list
     tdf = pd.concat([tlist[0] for tlist in t_data], ignore_index=True)
 
-    # Create columns of class integers based on bust labels
-    labels = list(pd.unique(tdf['any_bust']))
-    labels.remove('no_bust')
-    lab_dict = dict({'no_bust': 0},
-                    **{label: ind + 1 for ind, label in enumerate(labels)})
-    tdf['bust_class'] = tdf['any_bust'].map(lab_dict)
-
-    # Use all columns except bust_labels/classes for X
+    # Also need the whole dataset for any bust models
     X = tdf[co.PARAM_COLS]
     X = X.apply(pd.to_numeric)
+    all_y = tdf[co.BUST_COLS]
 
-    # Use bust classes (0, 1...) for y, but need all bust info for later
-    all_y = tdf[co.ALL_BUST_COLS]
-
-    if return_label_dict:
-        return X, all_y, lab_dict
     return X, all_y
 
 
-def get_model(X_train, y_train, X_test, y_test, clf_str, plot_dir, lab_dict):
+def my_precision(estimator, X, y):
     """
-    Finds optimal hyperparameters, trains random forest classifier, 
-    predicts classes, prints scores and creates plots of results.
+    Creates custom precision score that gives a micro average but
+    ignores the 'no bust' class, for use in hyperparameter optimisation.
+
+    Args:
+        estimator (sklearn classifier): Classifier
+        X (pandas.DataFrame): Input data
+        y (pandas.Series): Target data
+    Returns:    
+        precision_score (float): micro-averaged precision score
+    """
+    # Make predictions
+    y_pred = estimator.predict(X)
+
+    # Calculate micro-averaged precision score, ignoring the 'no bust'
+    # class (0)
+    score = precision_score(y, y_pred, labels=[1, 2], average='micro')
+
+    return score, y_pred
+
+
+def oob_precision(y_true, y_pred):
+
+    return precision_score(y_true, y_pred, labels=[1, 2], average='micro')
+
+
+def optimise_hypers(X_train, y_train, X_train_b, y_train_b, model_name):
+    """
+    Optimises hyperparameters for classifier.
 
     Args:
         X_train (pandas.DataFrame): Training input data
-        y_train (pandas.DataFrame): Training target data
-        X_test (pandas.DataFrame): Testing input data
-        y_test (pandas.DataFrame): Testing target data
-        clf_str (str): Classifier type
-        plot_dir (str): Directory to save plots to
-        lab_dict (dict): Label dictionary
+        y_train (pandas.Series): Training target data
+        model_name (str): Classifier name
     Returns:
-        model (sklearn.ensemble.RandomForestClassifier): Trained random 
-                                                         forest
-        y_pred (pandas.DataFrame): Predicted classes
-        pred_labels (pandas.DataFrame): Predicted labels
+        model (sklearn classifier): Optimised classifier
     """
-    # Oversample minority class using SMOTE
-    smo = SMOTE(random_state=8)
-    X_train, y_train = smo.fit_resample(X_train, y_train)
+    # For XGBoost
+    if model_name == 'XGBoost':
 
-    # Define hyperparameters to test
-    params = {
-        'n_estimators': [50, 100, 200, 400, 800],
-        'max_features': ['sqrt', 'log2', None],
-        'bootstrap': [True, False],
-        'min_samples_leaf': [1, 2, 4],
-        'min_samples_split': [2, 5, 10],
-        'random_state': [3]
-    }
+        # Define objective function
+        def objective(trial):
 
-    # Different variables for different classifier types
-    if clf_str == 'any_bust':
-        score = precision_score
-        scoring='precision'
-        req_scores = SCORES
-    else:
-        score = accuracy_score
-        scoring='accuracy'
-        req_scores = {'accuracy': accuracy_score}
+            # Define search space
+            param = {
+                'random_state': 42,
+                'verbosity': 0,
+                'n_estimators': trial.suggest_int("n_estimators", 100, 500,
+                                                  step=100),
+                'max_depth': trial.suggest_categorical('max_depth', [None] + 
+                                                       list(range(2, 11))),
+                'learning_rate': trial.suggest_float('learning_rate', 0.01, 
+                                                     0.2),
+                'min_child_weight': trial.suggest_int("min_child_weight", 1, 
+                                                      6), 
+                'n_jobs': -1
+            }
 
-    # First, train and test model with default hyperparameters
-    default_model = RandomForestClassifier()
+            # Define classifier
+            mod = XGBClassifier(**param)
 
-    # model = RFECV(default_model)
-    # model.fit(X_train, y_train)
-    # selected_features = np.array(co.PARAM_COLS)[model.get_support()]
-    # y_pred = model.predict(X_test)
-    # print(f'\nSelected features: {selected_features}')
+            # Use cross validation to get mean macro precision score
+            mean_prec_score = get_prec(X_train, y_train, mod)
 
-    default_model.fit(X_train, y_train)
-    y_pred_default = default_model.predict(X_test)
-    default_score = score(y_test, y_pred_default)
+            return mean_prec_score
 
-    # # Get the number of samples in the original datasets
-    # num_samples = len(X_train)
+        # Define default model and get precision score
+        default_mod = XGBClassifier(random_state=42, verbosity=0)
+        default_score = get_prec(X_train, y_train, default_mod)
 
-    # # Subset data if too large
-    # if num_samples > 100:
+        # Run optimisation
+        study = optuna.create_study(direction='maximize')
+        study.optimize(objective, n_trials=50)
+        trial = study.best_trial
+
+        # Choose best model
+        if trial.value > default_score:
+            best_clf = XGBClassifier(**trial.params)
+        else:
+            best_clf = default_mod
+
+    # For Random Forest
+    elif model_name == 'Random Forest':
+
+        def objective(trial):
+
+            param = {
+                'random_state': 42,
+                'n_estimators': trial.suggest_int("n_estimators", 100, 500,
+                                                  step=100),
+                'max_depth': trial.suggest_categorical("max_depth", [None] + 
+                                                       list(range(2, 11))),
+                'min_samples_split': trial.suggest_int("min_samples_split", 2, 
+                                                       20, step=2),
+                'max_features': trial.suggest_int("max_features", 3, 15),
+                'n_jobs': -1
+            }
+
+            # Define classifier
+            mod = RandomForestClassifier(**param)
+
+            # Use cross validation to get mean macro precision score
+            mean_prec_score = get_prec(X_train, y_train, mod)
+
+            return mean_prec_score
+
+        # Define default model and get precision score
+        default_mod = RandomForestClassifier(random_state=42)
+        default_score = get_prec(X_train, y_train, default_mod)
+
+        # Run optimisation                         
+        study = optuna.create_study(direction='maximize')
+        study.optimize(objective, n_trials=50)
+        trial = study.best_trial
         
-    #     # Set random seed for reproducibility
-    #     np.random.seed(42)
+        # Choose best model
+        if trial.value > default_score:
+            best_clf = RandomForestClassifier(**trial.params)
+        else:
+            best_clf = default_mod
 
-    #     # Calculate the number of samples for the 10% subset
-    #     subset_size = int(num_samples * 0.1)
+    # Fit optimised model on balanced data
+    best_clf.fit(X_train_b, y_train_b)
 
-    #     # Generate random indices for the subset
-    #     subset_indices = np.random.choice(num_samples, size=subset_size, 
-    #                                       replace=False)
-
-    #     # Create the random 10% subsets
-    #     X_train_subset = X_train.iloc[subset_indices]
-    #     y_train_subset = y_train.iloc[subset_indices]
-
-    # # Otherwise, use full dataset
-    # else:
-    #     X_train_subset = X_train
-    #     y_train_subset = y_train
-
-    # # Use RandomizedSearchCV to obtain best hyperparameters
-    # random_search = RandomizedSearchCV(RandomForestClassifier(), 
-    #                                    param_distributions=params, n_jobs=8,
-    #                                    scoring=scoring, random_state=42,
-    #                                    n_iter=50)
-    # random_search.fit(X_train_subset, y_train_subset)
-
-    # # Train model using optimised hyperparameters
-    # best_model = random_search.best_estimator_
-    # best_model.fit(X_train, y_train)
-    # y_pred_best = best_model.predict(X_test)
-    # best_score = score(y_test, y_pred_best)
-
-    # # Print scores
-    # print(f'\nResults for {clf_str.replace("_", " ")} classifier\n')
-    # print('Default_score', default_score)
-    # print('Best_score', best_score)
-
-    # # Check optimised parameters produce better results
-    # if best_score > default_score:
-    #     print(f'\nBest hypers: {best_model.get_params()}')
-    #     model = best_model
-    #     y_pred = y_pred_best
-    # # Otherwise, use default settings
-    # else:
-    #     print('\nDefault hypers best')
-    #     model = default_model
-    #     y_pred = y_pred_default
-
-    ###TESTING
-    model = default_model
-    y_pred = y_pred_default
-
-    # # Print features in order of importance if required
-    # imp_feats = pd.DataFrame(zip(model.feature_names_in_,
-    #                              model.feature_importances_),
-    #                          columns=['Variable', 'Importance'])
-    # imp_feats = imp_feats.sort_values('Importance', ascending=False)
-    # imp_feats['Variable'] = imp_feats['Variable'].str.lower()
-    # imp_feats['Variable'] = imp_feats['Variable'].apply(
-    #     lambda x: x.replace('_', ' ')
-    # )
-
-    # Convert predictions back to strings
-    lab_dict_inv = {val: key for key, val in lab_dict.items()}
-    pred_labels = np.vectorize(lab_dict_inv.get)(y_pred)
-
-    # # Bar plot of importance features
-    # fig, ax = plt.subplots(figsize=(10, 8))
-    # sns.barplot(data=imp_feats, x='Importance', y='Variable')
-    # ax.set_title('Feature Importance', fontsize=20)
-    # ax.set_xlabel('Feature importance score', fontsize=18)
-    # ax.set_ylabel('Features', fontsize=18)
-    # plt.tight_layout()
-    # fig.savefig(f'{plot_dir}/feat_imp_{clf_str}.png')
-    # plt.close()
-
-    # Plot confusion matrix
-    fname = f'{plot_dir}/cm_{clf_str}.png'
-    plot_confusion_matrix(lab_dict, y_test, y_pred, fname)
-
-    return model, y_pred, pred_labels
+    return best_clf
 
 
 def pickle_unpickle(p_data, file_path):
@@ -460,16 +651,19 @@ def plot_confusion_matrix(lab_dict, y_test, y_pred, fname):
 
     # Create figure and axis
     fig, ax = plt.subplots()
-    
+
     # Plot confusion matrix
     cm = confusion_matrix(y_test, y_pred, labels=all_classes)
     sns.heatmap(cm, annot=True, fmt='g', cmap='Blues', cbar=False, ax=ax)
 
-    # Add labels
+    # Add labels (make nice if possible)
     ax.set_xlabel('Predicted label', fontsize=18)
     ax.set_ylabel('True label', fontsize=18)
-    ax.set_xticklabels(nice_labels)
-    ax.set_yticklabels(nice_labels)
+    try:
+        ax.set_xticklabels(nice_labels)
+        ax.set_yticklabels(nice_labels)
+    except:
+        pass
 
     # Save plot
     plt.tight_layout()
@@ -477,12 +671,13 @@ def plot_confusion_matrix(lab_dict, y_test, y_pred, fname):
     plt.close()
 
 
-def plot_model_scores(m_scores):
+def plot_model_scores(m_scores, param):
     """
     Plots classifier evaluation metrics.
 
     Args:
         m_scores (dict): Model scores
+        param (str): Parameter
     Returns:
         None
     """
@@ -490,15 +685,15 @@ def plot_model_scores(m_scores):
     fig, ax = plt.subplots(figsize=(9, 6))
 
     # Create box plot separating by day period if necessary
-    box_plot = sns.boxplot(data=m_scores, x='Evaluation Metric', y='Score', 
-                           hue='Classifier', showfliers=False)
+    sns.boxplot(data=m_scores, x='Evaluation Metric', y='Score',
+                hue='Classifier', showfliers=False)
 
     # Remove legend title and put outside axis
     handles, labels = ax.get_legend_handles_labels()
     box = ax.get_position()
     ax.set_position([box.x0, box.y0, box.width * 0.7, box.height])
     ax.legend(handles, labels, loc='center left', bbox_to_anchor=(1, 0.8),
-              fontsize=15, title='Classifier', 
+              fontsize=15, title='Classifier',
               title_fontproperties={'size':18, 'weight':'bold'})
 
     # Set font sizes on axes
@@ -514,17 +709,18 @@ def plot_model_scores(m_scores):
 
     # Save and close plot
     plt.tight_layout()
-    fig.savefig(f'{OUTPUT_DIR}/ml_plots/classifier_scores.png', 
-                bbox_inches = "tight")
+    fname = f'{OUTPUT_DIR}/ml_plots/model_scores/classifier_scores_{param}.png'
+    fig.savefig(fname, bbox_inches = "tight")
     plt.close()
 
 
-def plot_model_times(m_times):
+def plot_model_times(m_times, param):
     """
     Plots classifier processing times.
 
     Args:
         m_times (dict): Model times
+        param (str): Parameter
     Returns:
         None
     """
@@ -532,8 +728,7 @@ def plot_model_times(m_times):
     fig, ax = plt.subplots(figsize=(8, 6))
 
     # Create box plot separating by day period if necessary
-    box_plot = sns.boxplot(data=m_times, x='Classifier', y='Time', 
-                           showfliers=False)
+    sns.boxplot(data=m_times, x='Classifier', y='Time', showfliers=False)
 
     # Set font sizes on axes
     ax.tick_params(axis='x', labelsize=12)
@@ -548,144 +743,32 @@ def plot_model_times(m_times):
 
     # Save and close plot
     plt.tight_layout()
-    fig.savefig(f'{OUTPUT_DIR}/ml_plots/classifier_times.png', 
-                bbox_inches = "tight")
+    fname = f'{OUTPUT_DIR}/ml_plots/model_scores/classifier_times_{param}.png'
+    fig.savefig(fname, bbox_inches = "tight")
     plt.close()
-
-
-def predict_btypes(testing_data, clf_models, plot_dir):
-    """
-    Predicts bust type given bust (already predicted) and using
-    classifier previously created, then tests on full dataset.
-
-    Args:
-        testing_data (pandas.DataFrame): Testing data
-        clf_models (dict): Classifier dictionary
-        plot_dir (str): Directory to save plots to
-    """
-    # Get just rows with busts predicted
-    just_bust_preds = testing_data[testing_data['bust_predicts'] == 'bust']
-
-    # Define X data
-    X = just_bust_preds[co.PARAM_COLS]
-
-    for bust_col in co.BUST_COLS:
-
-       # Get bust type specific classifier
-        b_type_clf = clf_models[bust_col.split('_')[0]]
-
-        # Move on if no classifier
-        if b_type_clf is None:
-            print(f'No classifier for {bust_col}')
-            continue
-
-        # Get label dictionary
-        lab_dict = clf_models[bust_col.split('_')[0] + '_label_dict']
-
-        # Create columns of class integers based on bust labels and
-        # label dictionary
-        class_col = bust_col.replace('label', 'class')
-        testing_data[class_col] = testing_data[bust_col].map(lab_dict)
-
-        # Predict bust values
-        y_pred = b_type_clf.predict(X)
-
-        # Convert predictions back to strings
-        lab_dict_inv = {val: key for key, val in lab_dict.items()}
-        pred_labels= np.vectorize(lab_dict_inv.get)(y_pred)
-
-        # Add new columns with label and class predictions
-        lab_preds = '_'.join([bust_col, 'predictions'])
-        just_bust_preds[lab_preds] = pred_labels
-        testing_data[lab_preds] = just_bust_preds[lab_preds]
-        testing_data[lab_preds].fillna('no_busts', inplace=True)
-        class_preds = '_'.join([class_col, 'predictions'])
-        just_bust_preds[class_preds] = y_pred
-        testing_data[class_preds] = just_bust_preds[class_preds]
-        testing_data[class_preds].fillna(0, inplace=True)
-
-        # Get actual and predicted bust labels for all of testing data
-        y_test = testing_data[class_col]
-        y_pred = testing_data[class_preds]
-
-        # Plot confusion matrix
-        wx_type = bust_col.split('_')[0]
-        plot_fname = f'{plot_dir}/cm_{wx_type}.png'
-        plot_confusion_matrix(lab_dict, y_test, y_pred, plot_fname)
 
 
 def split_data(icao_data):
     """
-    Splits data into training and testing sets and oversamples minority 
-    class using SMOTE.
+    Splits data into training and testing sets.
 
     Args:
         icao_data (list): TAF data for airport
     Returns:
-        X_train_res (pandas.DataFrame): Training data
-        y_train_res (pandas.Series): Training labels
-        X_test (pandas.DataFrame): Testing data
-        y_test (pandas.Series): Testing labels
-        all_y_test (pandas.DataFrame): All testing labels
-        lab_dict (dict): Label dictionary
-        testing_data (pandas.DataFrame): Testing data
+        X_train (pandas.DataFrame): Training input data
+        all_y_train (pandas.DataFrame): Training target data
+        X_test (pandas.DataFrame): Testing input data
+        all_y_test (pandas.DataFrame): Testing target data
+        test_data (list): All testing data
     """
-
     # Split into training, validating and testing datasets
     train_data, test_data = train_test_split(icao_data, test_size=0.2)
 
     # Concatenate dataframes in each dataset
-    X_train, all_y_train, lab_dict = get_df(train_data, return_label_dict=True)
-    X_test, all_y_test = get_df(test_data)
+    X_train, all_y_train = get_xy(train_data)
+    X_test, all_y_test = get_xy(test_data)
 
-    return X_train, all_y_train, X_test, all_y_test, lab_dict, test_data
-
-
-def try_models(X_train, y_train, X_test, y_test, plot_dir, lab_dict, m_scores,
-               m_times):
-    """
-    Tries different classifiers on any bust model.
-
-    Args:
-        X_train (pandas.DataFrame): Training input data
-        y_train (pandas.DataFrame): Training target data
-        X_test (pandas.DataFrame): Testing input data
-        y_test (pandas.DataFrame): Testing target data
-        plot_dir (str): Directory to save plots to
-        lab_dict (dict): Label dictionary
-        m_scores (dict): Model scores
-        m_times (dict): Model processing times
-    Returns:
-        m_scores (dict): Updated model scores
-        m_times (dict): Updated model processing times
-    """
-    # Loop through all classifiers to test
-    for model_name, model in CLASSIFIERS.items():
-
-        # Fit model and predict classes, and time it
-        start_time = time.time()
-        model.fit(X_train, y_train)
-        y_pred = model.predict(X_test)
-        end_time = time.time()
-        elapsed_time = (end_time - start_time)
-        m_times['Classifier'].append(model_name)
-        m_times['Time'].append(elapsed_time)
-        print(f'\nElapsed time for {model_name}: {elapsed_time:.2f} seconds')
-
-        # Get required scores
-        print(f'Scores for {model_name}')
-        for score_name, score_func in SCORES.items():
-            m_score = score_func(y_test, y_pred)
-            print(score_name, m_score)
-            m_scores['Classifier'].append(model_name)
-            m_scores['Evaluation Metric'].append(score_name)
-            m_scores['Score'].append(m_score)
-
-        # Plot confusion matrix
-        fname = f'{plot_dir}/cm_{model_name}_any_bust.png'
-        plot_confusion_matrix(lab_dict, y_test, y_pred, fname)
-
-    return m_scores, m_times
+    return X_train, all_y_train, X_test, all_y_test, test_data
 
 
 if __name__ == "__main__":

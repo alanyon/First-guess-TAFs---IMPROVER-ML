@@ -267,10 +267,14 @@ def get_base_vis_wx(tdf_50, old_bases):
                           base conditions used for BECMG group)
     """
     # Get (up to) first 4 hours of vis and sig wx data from dataframe
-    viss, sig_wxs = (list(tdf_50['vis'])[:4], list(tdf_50['sig_wx'])[:4])
-
-    # Start base values as None, to be uptated
-    base_vis, base_wx = None, None
+    if old_bases:
+        viss, sig_wxs = [], []
+        for ind, cat in enumerate(tdf_50['vis_cat'][:4]):
+            if cat == list(tdf_50['vis_cat'])[0]:
+                viss.append(list(tdf_50['vis'])[ind])
+                sig_wxs.append(list(tdf_50['sig_wx'])[ind])
+    else:
+        viss, sig_wxs = list(tdf_50['vis'])[:4], list(tdf_50['sig_wx'])[:4]
 
     # Update for cases when precip consistently forecast - allow for
     # multiple wx in single sig wx entry (e.g. 'DZ FG')
