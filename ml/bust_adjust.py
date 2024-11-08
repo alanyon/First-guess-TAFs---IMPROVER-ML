@@ -238,6 +238,10 @@ def update_taf(tdf, site_df, clf_models, clf_type):
         # Update ml dataframe
         tdf = ds.get_ml_df(site_df)
 
+    # Update visibility and cloud TAF categories
+    site_df['vis_cat'] = site_df.apply(ex.vis_cat_row, axis=1)
+    site_df['cld_cat'] = site_df.apply(ex.cld_cat_row, axis=1)
+
     # Ensure sig wx still sensible with new visibilities - adjust if not
     site_df['sig_wx'] = site_df.apply(ex.update_sig_wx_for_new_vis, axis=1)
 
