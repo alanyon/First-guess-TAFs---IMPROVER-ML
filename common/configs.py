@@ -101,7 +101,7 @@ PRIORITY_DICT = {'base': 0, 'BECMG': 1, 'TEMPO': 2, 'PROB40': 3,
 
 PROB_DICT = {'TEMPO': 100, 'PROB40': 40, 'PROB40 TEMPO': 40, 'PROB30': 30,
              'PROB30 TEMPO': 30}
-BUST_COLS = ['vis_bust_label', 'cld_bust_label']
+BUST_COLS = ['wind_bust_label', 'vis_bust_label', 'cld_bust_label']
 
 # ML constants
 PARAM_COLS = [

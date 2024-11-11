@@ -108,7 +108,7 @@ def main():
             clf_models = get_clf(
                 clf_models, X_train, all_y_train, X_test, all_y_test,
                 plot_dir, bust_type, model_name, get_features=True, 
-                optimise=True, compare_models=True
+                optimise=True, compare_models=False
             )
 
     bl_data = [test_data, clf_models]
