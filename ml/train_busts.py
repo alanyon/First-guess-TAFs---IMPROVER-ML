@@ -133,7 +133,7 @@ def balance_data(X_train, y_train):
     """
     # Get minimum class count and class with minimum count
     class_counts = y_train.value_counts()
-    min_class_count = class_counts[min_class]
+    min_class_count = min(class_counts)
 
     # Use simple method on classes with 3 samples or less
     if min_class_count <= 3:
