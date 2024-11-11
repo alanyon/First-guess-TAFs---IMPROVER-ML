@@ -25,6 +25,7 @@ import pandas as pd
 import seaborn as sns
 from imblearn.over_sampling import SMOTE
 from imblearn.combine import SMOTETomek
+from imblearn.over_sampling import RandomOverSampler
 import optuna
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.metrics import (confusion_matrix, f1_score, precision_score,
@@ -130,6 +131,15 @@ def balance_data(X_train, y_train):
         X_train (pandas.DataFrame): Balanced training input data
         y_train (pandas.Series): Balanced training target data
     """
+    # Get minimum class count and class with minimum count
+    class_counts = y_train.value_counts()
+    min_class_count = class_counts[min_class]
+
+    # Use simple method on classes with 3 samples or less
+    if min_class_count <= 3:
+        oversampler = RandomOverSampler(sampling_strategy='minority')
+        X_train, y_train = oversampler.fit_resample(X_train, y_train)
+
     # Ensure k_neighbors is smaller than the smallest class
     class_counts = y_train.value_counts()
     k_neighbors = min([min(class_counts) - 1, 5])
@@ -262,7 +272,8 @@ def get_best_features(default, X_train, y_train, feat_fname, model_name):
 
             # Make predictions and score
             y_pred = selection_model.predict(X_test_fold)
-            prec = precision_score(y_test_fold, y_pred, average='macro')
+            prec = precision_score(y_test_fold, y_pred, average='macro',
+                                   zero_division=0)
             scores.append(prec)
 
         # Get mean score
@@ -343,7 +354,7 @@ def get_clf(clf_models, X_train, all_y_train, X_test, all_y_test, plot_dir,
     # Get default precision score
     default_y_pred = default.predict(X_test)
     default_precision = precision_score(y_test, default_y_pred, 
-                                        average='macro')
+                                        average='macro', zero_division=0)
     # f1 = f1_score(y_test, default_y_pred, average='macro')
     print('Score before optimisation:', default_precision)
 
@@ -399,7 +410,8 @@ def get_clf(clf_models, X_train, all_y_train, X_test, all_y_test, plot_dir,
 
     # Define optimal classifier and print score
     y_pred_opt = opt_model.predict(X_test)
-    opt_precision =  precision_score(y_test, y_pred_opt, average='macro')
+    opt_precision =  precision_score(y_test, y_pred_opt, average='macro',
+                                     zero_division=0)
     # f1 = f1_score(y_test, y_pred_opt, average='macro')
     print('Score after optimisation:', opt_precision)
 
@@ -454,7 +466,8 @@ def get_prec(X_train, y_train, mod):
 
         # Make predictions and score
         y_pred = mod.predict(X_test_fold)
-        prec = precision_score(y_test_fold, y_pred, average='macro')
+        prec = precision_score(y_test_fold, y_pred, average='macro',
+                               zero_division=0)
         scores.append(prec)
 
     mean_score = np.mean(scores)
@@ -500,14 +513,16 @@ def my_precision(estimator, X, y):
 
     # Calculate micro-averaged precision score, ignoring the 'no bust'
     # class (0)
-    score = precision_score(y, y_pred, labels=[1, 2], average='micro')
+    score = precision_score(y, y_pred, labels=[1, 2], average='micro',
+                            zero_division=0)
 
     return score, y_pred
 
 
 def oob_precision(y_true, y_pred):
 
-    return precision_score(y_true, y_pred, labels=[1, 2], average='micro')
+    return precision_score(y_true, y_pred, labels=[1, 2], average='micro',
+                           zero_division=0)
 
 
 def optimise_hypers(X_train, y_train, X_train_b, y_train_b, model_name):

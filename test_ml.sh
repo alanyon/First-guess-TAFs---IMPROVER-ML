@@ -8,7 +8,7 @@
 
 # Data directories
 export OUTPUT_DIR=/data/users/alanyon/tafs/improver/verification/20230805-20241004_ml
-export FAKE_DATE=20230927
+export FAKE_DATE=20230818
 
 # Define pythonpath
 export PYTHONPATH=$PYTHONPATH:~alanyon/first_guess_TAFs/improver_ml/
