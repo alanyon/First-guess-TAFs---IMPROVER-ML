@@ -54,8 +54,7 @@ FAKE_DATE = os.environ['FAKE_DATE']
 # Other constants
 SCORES = {'F1 score': f1_score, 'Recall': recall_score, 
           'Precision': precision_score}
-CLASSIFIERS = ['XGBoost', 'Random Forest', 'Decision Tree', 
-               'Gradient Boosting']
+CLASSIFIERS = ['XGBoost', 'Random Forest']
 
 # Seaborn settings
 sns.set_style('darkgrid')
@@ -108,8 +107,8 @@ def main():
             # Get models to predict bust/no bust and bust type
             clf_models = get_clf(
                 clf_models, X_train, all_y_train, X_test, all_y_test,
-                plot_dir, bust_type, model_name, get_features=False, 
-                optimise=False, compare_models=True
+                plot_dir, bust_type, model_name, get_features=True, 
+                optimise=True, compare_models=False
             )
 
     bl_data = [test_data, clf_models]
