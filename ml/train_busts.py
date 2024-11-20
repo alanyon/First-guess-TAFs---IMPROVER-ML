@@ -263,11 +263,9 @@ def get_best_features(default, X_train, y_train, feat_fname, model_name):
 
             # train model
             if model_name == 'XGBoost':
-                selection_model = XGBClassifier(random_state=42, 
-                                                n_estimators=200)
+                selection_model = XGBClassifier(random_state=42)
             elif model_name == 'Random Forest':
-                selection_model = RandomForestClassifier(random_state=42,
-                                                         n_estimators=200)
+                selection_model = RandomForestClassifier(random_state=42)
             selection_model.fit(X_tr_b, y_tr_b)
 
             # Make predictions and score

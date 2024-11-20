@@ -1,0 +1,162 @@
+import time
+import os
+import copy
+import itertools
+import matplotlib.pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
+import numpy as np
+import pickle
+import pandas as pd
+import seaborn as sns
+from sklearn.metrics import precision_score, recall_score
+import common.configs as co
+import ml.train_busts as tr
+
+# Define constants
+OUTPUT_DIR = os.environ['OUTPUT_DIR']
+PARAMS = {'vis': 'Visibility', 'cld': 'Cloud'}
+MODELS = {'xgboost': 'XGBoost', 'random_forest': 'Random Forest'}
+NUM_ICAOS = len(co.ML_ICAOS)
+
+
+def main():
+    """
+    Main function...
+    """
+    # For collecting feature stats
+    scores = {
+        'vis': {'Airport': [], 'XGBoost Recall': [], 'XGBoost Precision': [], 
+                'Random Forest Recall': [], 'Random Forest Precision': []},
+        'cld': {'Airport': [], 'XGBoost Recall': [], 'XGBoost Precision': [], 
+                'Random Forest Recall': [], 'Random Forest Precision': []}}
+
+    # Get dictionary mapping ICAOs to airport names
+    icao_dict = get_icao_dict()
+
+    # loop through all ICAOs
+    for icao in co.ML_ICAOS:
+        
+        # Unpickle data
+        with open(f'{OUTPUT_DIR}/pickles/clfs_data_{icao}', 'rb') as f_object:
+            unpickler = pickle.Unpickler(f_object)
+            test_data, clf_models = unpickler.load()
+
+        # Concatenate dataframes in each dataset
+        X_test, all_y_test = tr.get_xy(test_data)
+
+        # Loop through each parameter
+        for param in PARAMS:
+
+            # Update scores with airport name
+            scores[param]['Airport'].append(icao_dict[icao])
+
+            # Loop through each model
+            for model in MODELS:
+
+                # Get model
+                clf = clf_models[f'{param}_{model}']
+
+                # Get label dictionary
+                lab_dict = clf_models[f'{param}_{model}_label_dict']
+
+                # Get class integers based on lab_dict
+                y_test = all_y_test[f'{param}_bust_label'].map(lab_dict)
+
+                # Just use best features
+                X_best = X_test[clf_models[f'{param}_{model}_features']]
+
+                # Get predictions
+                y_pred = clf.predict(X_best)
+
+                # Get scores
+                recall = recall_score(y_test, y_pred, average='macro')
+                precision = precision_score(y_test, y_pred, average='macro')
+
+                # Update scores
+                scores[param][f'{MODELS[model]} Recall'].append(recall)
+                scores[param][f'{MODELS[model]} Precision'].append(precision)
+
+    # Pickle scores
+    with open(f'{OUTPUT_DIR}/pickles/scores', 'wb') as f_object:
+        pickler = pickle.Pickler(f_object)
+        pickler.dump(scores)
+    # Unpickle scores
+    with open(f'{OUTPUT_DIR}/pickles/scores', 'rb') as f_object:
+        unpickler = pickle.Unpickler(f_object)
+        scores = unpickler.load()
+
+    # Create heatmap table of scores
+    score_table(scores, 'vis')
+    score_table(scores, 'cld')
+
+
+def get_icao_dict():
+    """
+    Creates a dictionary mapping ICAO codes to airport names.
+
+    Args:
+        None
+    Returns:
+        icao_dict (dict): Dictionary mapping ICAO codes to airport names
+    """
+    # Load in airport info
+    airport_info = pd.read_csv('taf_info.csv', header=0)
+
+    # Create dictionary mapping ICAO codes to airport names
+    icao_dict = pd.Series(airport_info.airport_name.values,
+                          index=airport_info.icao).to_dict()
+
+    return icao_dict
+
+
+def score_table(scores, param):
+
+    # Get parameter scores and convert to dataframe
+    scores_df = pd.DataFrame(scores[param])
+
+    # Set the Airport column as the index so we can display it nicely
+    scores_df.set_index('Airport', inplace=True)
+
+    # Create a custom colormap (red to green)
+    clrs = [(0.8, 0.2, 0.2), (1, 0, 0), (0.95, 0.95, 0.95), (0.6, 1, 0.6),
+            (0, 0.5, 0)]
+    custom_cmap = LinearSegmentedColormap.from_list('custom_red_green', clrs)
+
+    # Create figure and axis
+    fig, ax = plt.subplots(figsize=(12, 14))
+
+    # Create heatmap with color-coded P-values and T-statistics
+    sns.heatmap(scores_df, annot=scores_df, cmap=custom_cmap, center=0.5,
+                fmt='.2f', linewidths=0.5, cbar=False)
+
+    # Edit axes labels
+    labels = ax.get_xticklabels()
+    for label in labels:
+        # Insert \n in score labels
+        label.set_text(label.get_text().replace(' F1',
+                                                '\nF1').replace(' Pr', '\nPr'))
+    ax.set_xticklabels(labels, fontsize=14)
+    ax.set_yticklabels(ax.get_yticklabels(), fontsize=14)
+
+    # Remove x ticks but not labels
+    ax.tick_params(axis='x', length=0)
+
+    # Format the plot
+    ax.set_ylabel('')
+    plt.xticks(rotation=90)
+    ax.xaxis.tick_top()
+
+    # Save and close figure
+    fig.savefig(f'{OUTPUT_DIR}/ml_plots/icao_scores/{param}_scores.png',
+                bbox_inches='tight')
+    plt.close()
+           
+
+if __name__ == "__main__":
+
+    # Run main function and time it
+    start_time = time.time()
+    main()
+    end_time = time.time()
+    elapsed_time = (end_time - start_time) / 60
+    print(f"Finished in {elapsed_time:.2f} minutes")
