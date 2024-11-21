@@ -548,8 +548,8 @@ def optimise_hypers(X_train, y_train, X_train_b, y_train_b, model_name):
                                                   step=100),
                 'max_depth': trial.suggest_categorical('max_depth', [None] + 
                                                        list(range(2, 11))),
-                'learning_rate': trial.suggest_float('learning_rate', 0.01, 
-                                                     0.2),
+                'learning_rate': trial.suggest_float('learning_rate', 0.1, 
+                                                     0.5),
                 'min_child_weight': trial.suggest_int("min_child_weight", 1, 
                                                       6), 
                 'n_jobs': -1
