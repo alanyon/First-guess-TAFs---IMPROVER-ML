@@ -62,6 +62,15 @@ sns.set_style('darkgrid')
 # Suppress FutureWarnings
 warnings.filterwarnings("ignore")
 
+XG_DEFAULTS = {'n_estimators': 100, 'max_depth': 6,  'learning_rate': 0.3, 
+               'verbosity': 0, 'objective': "binary:logistic", 
+               'booster': "gbtree", 'tree_method': "auto", 'n_jobs': 1, 
+               'gamma': 0, 'min_child_weight': 1, 'subsample': 1, 
+               'colsample_bytree': 1, 'colsample_bylevel': 1, 
+               'colsample_bynode': 1, 'reg_alpha': 0, 'reg_lambda': 1, 
+               'scale_pos_weight': 1, 'base_score': 0.5, 'random_state': 42, 
+               'seed': 0, 'use_label_encoder': False}
+
 
 def main():
     """
@@ -263,7 +272,7 @@ def get_best_features(default, X_train, y_train, feat_fname, model_name):
 
             # train model
             if model_name == 'XGBoost':
-                selection_model = XGBClassifier(random_state=42)
+                selection_model = XGBClassifier(**XG_DEFAULTS)
             elif model_name == 'Random Forest':
                 selection_model = RandomForestClassifier(random_state=42)
             selection_model.fit(X_tr_b, y_tr_b)
@@ -333,7 +342,7 @@ def get_clf(clf_models, X_train, all_y_train, X_test, all_y_test, plot_dir,
 
     # Define default model  
     if model_name == 'XGBoost':
-        default = XGBClassifier(random_state=42)
+        default = XGBClassifier(**XG_DEFAULTS)
     elif model_name == 'Random Forest':
         default = RandomForestClassifier(random_state=42)
     elif model_name == 'Decision Tree':
@@ -397,7 +406,7 @@ def get_clf(clf_models, X_train, all_y_train, X_test, all_y_test, plot_dir,
                                     model_name)
     else:
         if model_name == 'XGBoost':
-            opt_model = XGBClassifier(random_state=42)
+            opt_model = XGBClassifier(**XG_DEFAULTS)
         elif model_name == 'Random Forest':
             opt_model = RandomForestClassifier(random_state=42)
         elif model_name == 'Decision Tree':
@@ -552,7 +561,21 @@ def optimise_hypers(X_train, y_train, X_train_b, y_train_b, model_name):
                                                      0.5),
                 'min_child_weight': trial.suggest_int("min_child_weight", 1, 
                                                       6), 
-                'n_jobs': -1
+                'n_jobs': -1,
+                'objective': "binary:logistic",
+                'booster': "gbtree",
+                'tree_method': "auto",
+                'gamma': 0,
+                'subsample': 1,
+                'colsample_bytree': 1,
+                'colsample_bylevel': 1,
+                'colsample_bynode': 1,
+                'reg_alpha': 0,
+                'reg_lambda': 1,
+                'scale_pos_weight': 1,
+                'base_score': 0.5,
+                'seed': 0,
+                'use_label_encoder': False
             }
 
             # Define classifier
@@ -564,7 +587,7 @@ def optimise_hypers(X_train, y_train, X_train_b, y_train_b, model_name):
             return mean_prec_score
 
         # Define default model and get precision score
-        default_mod = XGBClassifier(random_state=42, verbosity=0)
+        default_mod = XGBClassifier(**XG_DEFAULTS)
         default_score = get_prec(X_train, y_train, default_mod)
 
         # Run optimisation

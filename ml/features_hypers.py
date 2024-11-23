@@ -18,53 +18,59 @@ NUM_ICAOS = len(co.ML_ICAOS)
 # Seaborn settings
 sns.set_style('darkgrid')
 
+pd.set_option('display.max_rows', None)
+
 def main():
     """
     Main function...
     """
-    # # For collecting feature stats
-    # best_features = {'xgboost_vis': {feat: 0 for feat in co.PARAM_COLS},
-    #                  'xgboost_cld': {feat: 0 for feat in co.PARAM_COLS},
-    #                  'random_forest_vis': {feat: 0 for feat in co.PARAM_COLS},
-    #                  'random_forest_cld': {feat: 0 for feat in co.PARAM_COLS}}
+    # For collecting feature stats
+    best_features = {'xgboost_vis': {feat: 0 for feat in co.PARAM_COLS},
+                     'xgboost_cld': {feat: 0 for feat in co.PARAM_COLS},
+                     'random_forest_vis': {feat: 0 for feat in co.PARAM_COLS},
+                     'random_forest_cld': {feat: 0 for feat in co.PARAM_COLS}}
 
-    # # For collecting hyperparameter stats
-    # xg_template = {'n_estimators': [], 'max_depth': [], 'learning_rate': [], 
-    #                'min_child_weight': []}
-    # rf_template = {'n_estimators': [], 'max_depth': [], 
-    #                'min_samples_split': [], 'max_features': []}
-    # hyperparams = {'xgboost_vis': copy.deepcopy(xg_template),
-    #                'xgboost_cld': copy.deepcopy(xg_template),
-    #                'random_forest_vis': copy.deepcopy(rf_template),
-    #                'random_forest_cld': copy.deepcopy(rf_template)}
+    # For collecting hyperparameter stats
+    xg_template = {'n_estimators': [], 'max_depth': [], 'learning_rate': [], 
+                   'min_child_weight': []}
+    rf_template = {'n_estimators': [], 'max_depth': [], 
+                   'min_samples_split': [], 'max_features': []}
+    hyperparams = {'xgboost_vis': copy.deepcopy(xg_template),
+                   'xgboost_cld': copy.deepcopy(xg_template),
+                   'random_forest_vis': copy.deepcopy(rf_template),
+                   'random_forest_cld': copy.deepcopy(rf_template)}
 
-    # # loop through all ICAOs
-    # for icao in co.ML_ICAOS:
+    # loop through all ICAOs
+    for icao in co.ML_ICAOS:
         
-    #     # Unpickle data
-    #     with open(f'{OUTPUT_DIR}/pickles/clfs_data_{icao}', 'rb') as file_object:
-    #         unpickler = pickle.Unpickler(file_object)
-    #         test_data, clf_models = unpickler.load()
+        print(icao)
+        # Unpickle data
+        with open(f'{OUTPUT_DIR}/pickles/clfs_data_{icao}', 'rb') as file_object:
+            unpickler = pickle.Unpickler(file_object)
+            test_data, clf_models = unpickler.load()
 
-    #     # Update stats for model and parameter
-    #     for param, model in itertools.product(PARAMS, MODELS):
+        # Update stats for model and parameter
+        for param, model in itertools.product(PARAMS, MODELS):
 
-    #         # Update feature stats
-    #         for feature in clf_models[f'{param}_{model}_features']:
-    #             best_features[f'{model}_{param}'][feature] += 1
+            # Update feature stats
+            for feature in clf_models[f'{param}_{model}_features']:
+                best_features[f'{model}_{param}'][feature] += 1
 
-    #         # Update hyperparameter stats
-    #         for key, val in hyperparams[f'{model}_{param}'].items():
-    #             hyperparams[f'{model}_{param}'][key].append(
-    #                 clf_models[f'{param}_{model}'].get_params()[key])
+            # Update hyperparameter stats
+            for key, val in hyperparams[f'{model}_{param}'].items():
 
-    # # Pickle stats
-    # with open(f'{OUTPUT_DIR}/pickles/best_features', 'wb') as file_object:
-    #     pickler = pickle.Pickler(file_object)
-    #     pickler.dump(best_features)
-    # with open(f'{OUTPUT_DIR}/pickles/hyperparams', 'wb') as file_object:
-    #     pickler = pickle.Pickler(file_object)
-    #     pickler.dump(hyperparams)
+                print(key, val)
+                
+                hyperparams[f'{model}_{param}'][key].append(
+                    clf_models[f'{param}_{model}'].get_params()[key])
+
+    # Pickle stats
+    with open(f'{OUTPUT_DIR}/pickles/best_features', 'wb') as file_object:
+        pickler = pickle.Pickler(file_object)
+        pickler.dump(best_features)
+    with open(f'{OUTPUT_DIR}/pickles/hyperparams', 'wb') as file_object:
+        pickler = pickle.Pickler(file_object)
+        pickler.dump(hyperparams)
 
     # Unpickle stats
     with open(f'{OUTPUT_DIR}/pickles/best_features', 'rb') as file_object:
