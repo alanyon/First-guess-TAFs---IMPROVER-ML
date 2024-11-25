@@ -54,7 +54,8 @@ FAKE_DATE = os.environ['FAKE_DATE']
 # Other constants
 SCORES = {'F1 score': f1_score, 'Recall': recall_score, 
           'Precision': precision_score}
-CLASSIFIERS = ['XGBoost', 'Random Forest']
+CLASSIFIERS = ['XGBoost', 'Random Forest', 'Decision Tree', 
+               'Gradient Boosting']
 
 # Seaborn settings
 sns.set_style('darkgrid')
@@ -116,12 +117,12 @@ def main():
             # Get models to predict bust/no bust and bust type
             clf_models = get_clf(
                 clf_models, X_train, all_y_train, X_test, all_y_test,
-                plot_dir, bust_type, model_name, get_features=True, 
-                optimise=True, compare_models=False
+                plot_dir, bust_type, model_name, get_features=False, 
+                optimise=False, compare_models=True
             )
 
     bl_data = [test_data, clf_models]
-    bl_fname = f'{OUTPUT_DIR}/pickles/clfs_data_{icao}'
+    bl_fname = f'{OUTPUT_DIR}/pickles/clfs_data_models_{icao}'
 
     # Pickle files including bust label classifier models
     with open(bl_fname, 'wb') as f_object:

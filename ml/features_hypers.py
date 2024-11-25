@@ -43,7 +43,6 @@ def main():
     # loop through all ICAOs
     for icao in co.ML_ICAOS:
         
-        print(icao)
         # Unpickle data
         with open(f'{OUTPUT_DIR}/pickles/clfs_data_{icao}', 'rb') as file_object:
             unpickler = pickle.Unpickler(file_object)
@@ -58,9 +57,6 @@ def main():
 
             # Update hyperparameter stats
             for key, val in hyperparams[f'{model}_{param}'].items():
-
-                print(key, val)
-                
                 hyperparams[f'{model}_{param}'][key].append(
                     clf_models[f'{param}_{model}'].get_params()[key])
 
@@ -190,7 +186,7 @@ def plot_hyperparams(hyperparams, model):
             sns.histplot(data=hy_data, x=vis_hyper, ax=ax, bins=10, 
                          hue='Parameter', hue_order=hue_order, palette=colours, 
                          alpha=0.5)
-            ax.set_title(f'Histogram for {vis_hyper} distribution', 
+            ax.set_title(f'Histogram for {vis_hyper}', 
                          fontsize=20, weight='bold')
 
         # For other categorical hyperparameters...

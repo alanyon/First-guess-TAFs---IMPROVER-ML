@@ -28,7 +28,8 @@ def main():
         'vis': {'Airport': [], 'XGBoost Recall': [], 'XGBoost Precision': [], 
                 'Random Forest Recall': [], 'Random Forest Precision': []},
         'cld': {'Airport': [], 'XGBoost Recall': [], 'XGBoost Precision': [], 
-                'Random Forest Recall': [], 'Random Forest Precision': []}}
+                'Random Forest Recall': [], 'Random Forest Precision': []}
+    }
 
     # Get dictionary mapping ICAOs to airport names
     icao_dict = get_icao_dict()
@@ -86,8 +87,11 @@ def main():
         scores = unpickler.load()
 
     # Create heatmap table of scores
-    score_table(scores, 'vis')
-    score_table(scores, 'cld')
+    vis_scores = score_table(scores, 'vis')
+    cld_scores = score_table(scores, 'cld')
+
+    # Create boxplot of scores
+    make_boxplot(vis_scores, cld_scores)
 
 
 def get_icao_dict():
@@ -150,7 +154,65 @@ def score_table(scores, param):
     fig.savefig(f'{OUTPUT_DIR}/ml_plots/icao_scores/{param}_scores.png',
                 bbox_inches='tight')
     plt.close()
-           
+
+    # Add parameter to scores_df
+    scores_df['Parameter'] = PARAMS[param]
+
+    return scores_df
+
+
+def make_boxplot(vis_scores, cld_scores):
+
+    # Combine visibility and cloud scores
+    scores_df = pd.concat([vis_scores, cld_scores])
+
+    # Rearrange for plotting
+    box_scores = {'Performance Metric': [], 'Model Type': [], 'Score': []}
+    for _, row in scores_df.iterrows():
+        box_scores['Performance Metric'].append('Recall')
+        box_scores['Model Type'].append(f'XGBoost ({row.Parameter})')
+        box_scores['Score'].append(row['XGBoost Recall'])
+        box_scores['Performance Metric'].append('Recall')
+        box_scores['Model Type'].append(f'Random Forest ({row.Parameter})')
+        box_scores['Score'].append(row['Random Forest Recall'])
+        box_scores['Performance Metric'].append('Precision')
+        box_scores['Model Type'].append(f'XGBoost ({row.Parameter})')
+        box_scores['Score'].append(row['XGBoost Precision'])
+        box_scores['Performance Metric'].append('Precision')
+        box_scores['Model Type'].append(f'Random Forest ({row.Parameter})')
+        box_scores['Score'].append(row['Random Forest Precision'])
+
+    # Create figure and axis
+    fig, ax = plt.subplots(figsize=(14, 8))
+
+    # Create boxplot of scores
+    sns.boxplot(data=box_scores, x='Performance Metric', y='Score',
+                hue='Model Type', ax=ax)
+
+    # Remove legend title and put outside axis
+    handles, labels = ax.get_legend_handles_labels()
+    box = ax.get_position()
+    ax.set_position([box.x0, box.y0, box.width * 0.7, box.height])
+    ax.legend(handles, labels, loc='center left', bbox_to_anchor=(1, 0.8),
+              fontsize=15, title='Model Type',
+              title_fontproperties={'size':18, 'weight':'bold'})
+
+    # Set font sizes on axes
+    ax.tick_params(axis='x', labelsize=14)
+    ax.tick_params(axis='y', labelsize=14)
+    ax.set_ylabel('Score', fontsize=18, weight='bold')
+    ax.set_xlabel('Performance Metric', fontsize=18, weight='bold')
+
+    # Add vertical lines to separate scores
+    # ax.axvline(-0.5, color='k', linestyle='-', linewidth=1, alpha=0.3)
+    for x_loc in range(len(set(box_scores['Performance Metric']))):
+        ax.axvline(x_loc + 0.5, color='white', linestyle='-', linewidth=1)
+
+    # Save and close figure
+    fig.savefig(f'{OUTPUT_DIR}/ml_plots/icao_scores/boxplot.png',
+                bbox_inches='tight')
+    plt.close()
+  
 
 if __name__ == "__main__":
 
