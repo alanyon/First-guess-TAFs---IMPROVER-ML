@@ -767,9 +767,9 @@ def update_sig_wx(row):
     wx_str = ch.check_rate(row['precip_rate'], row['vis'], row['temp'],
                            wx_str)
 
-    # Ensure appropriate mist/fog code used
-    wx_str = ch.check_mist_fog(row['vis'], row['temp'], row['rules_col'],
-                               wx_str)
+    # Ensure appropiate wx code is used based on visibility
+    wx_str = ch.vis_based_wx(row['vis'], row['temp'], row['rules_col'],
+                             row['sig_wx'])
 
     return wx_str
 
@@ -835,11 +835,11 @@ def update_values(site_df):
     # (not available in IMPROVER)
     site_df = fill_in_sig_wxs(site_df)
 
-    # Adjust visibility based on cloud base, wind and sig wx
-    site_df['vis'] = site_df.apply(update_vis, axis=1)
+    # # Adjust visibility based on cloud base, wind and sig wx
+    # site_df['vis'] = site_df.apply(update_vis, axis=1)
 
-    # Update wx again with new visibilities
-    site_df['sig_wx'] = site_df.apply(update_sig_wx, axis=1)
+    # # Update wx again with new visibilities
+    # site_df['sig_wx'] = site_df.apply(update_sig_wx, axis=1)
 
     # Get visibility and cloud TAF categories
     site_df['vis_cat'] = site_df.apply(vis_cat_row, axis=1)
