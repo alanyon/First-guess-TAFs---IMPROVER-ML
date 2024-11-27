@@ -769,7 +769,7 @@ def update_sig_wx(row):
 
     # Ensure appropiate wx code is used based on visibility
     wx_str = ch.vis_based_wx(row['vis'], row['temp'], row['rules_col'],
-                             row['sig_wx'])
+                             wx_str)
 
     return wx_str
 
