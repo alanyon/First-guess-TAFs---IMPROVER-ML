@@ -767,9 +767,13 @@ def update_sig_wx(row):
     wx_str = ch.check_rate(row['precip_rate'], row['vis'], row['temp'],
                            wx_str)
 
-    # Ensure appropiate wx code is used based on visibility
-    wx_str = ch.vis_based_wx(row['vis'], row['temp'], row['rules_col'],
-                             wx_str)
+    # Check mist/fog
+    sig_wx = ch.check_mist_fog(row['vis'], row['temp'], row['rules_col'],
+                               wx_str, sig_wx)
+
+    # # Ensure appropiate wx code is used based on visibility
+    # wx_str = ch.vis_based_wx(row['vis'], row['temp'], row['rules_col'],
+    #                          wx_str)
 
     return wx_str
 
