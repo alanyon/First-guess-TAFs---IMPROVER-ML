@@ -47,8 +47,7 @@ FAKE_DATE = os.environ['FAKE_DATE']
 # Other constants
 SCORES = {'F1 score': f1_score, 'Recall': recall_score,
           'Precision': precision_score}
-CLASSIFIERS = ['XGBoost', 'Random Forest', 'Decision Tree',
-               'Gradient Boosting']
+CLASSIFIERS = ['XGBoost', 'Random Forest']
 
 # Seaborn settings
 sns.set_style('darkgrid')
@@ -109,8 +108,8 @@ def main():
             # Get models to predict bust/no bust and bust type
             clf_models = get_clf(
                 clf_models, X_train, all_y_train, X_test, all_y_test,
-                plot_dir, bust_type, model_name, get_features=True,
-                optimise=True, compare_models=False
+                plot_dir, bust_type, model_name, get_features=False,
+                optimise=False, compare_models=False
             )
 
     bl_data = [test_data, clf_models]
@@ -282,9 +281,9 @@ def get_clf(clf_models, X_train, all_y_train, X_test, all_y_test, plot_dir,
 
     # Define default model
     if model_name == 'XGBoost':
-        default = XGBClassifier(**XG_DEFAULTS)
+        default = XGBClassifier(n_estimators=500, random_state=42)
     elif model_name == 'Random Forest':
-        default = RandomForestClassifier(random_state=42)
+        default = RandomForestClassifier(n_estimators=500, random_state=42)
     elif model_name == 'Decision Tree':
         default = DecisionTreeClassifier(random_state=42)
     elif model_name == 'Gradient Boosting':
