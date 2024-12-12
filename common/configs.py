@@ -113,14 +113,10 @@ PARAM_COLS = [
     'cld_cat_70.0'
 ]
 
-ML_ICAOS = [
-    'EGAA', 'EGAC', 'EGAE', 'EGBB', 'EGBJ', 'EGCC', 'EGCK', 'EGEC', 'EGEO', 
-    'EGFF', 'EGGD', 'EGGP', 'EGGW', 'EGHC', 'EGHE', 'EGHH', 'EGHI', 'EGHQ', 
-    'EGKA', 'EGKB', 'EGKK', 'EGLC', 'EGLF', 'EGLL', 'EGMC', 'EGMD', 'EGNH', 
-    'EGNJ', 'EGNM', 'EGNO', 'EGNR', 'EGNT', 'EGNV', 'EGNX', 'EGPA', 'EGPB', 
-    'EGPC', 'EGPD', 'EGPE', 'EGPF', 'EGPH', 'EGPI', 'EGPK', 'EGPL', 'EGPN', 
-    'EGPO', 'EGPU', 'EGSC', 'EGSH', 'EGSS', 'EGSY', 'EGTC', 'EGTE', 'EGTK',
-]
+ML_ICAOS = ['EGAA', 'EGAC', 'EGCC', 'EGCK', 'EGFF', 'EGHH', 'EGGW', 'EGGD', 
+            'EGGP', 'EGKK', 'EGLL', 'EGNJ', 'EGNT', 'EGNX', 'EGPE', 'EGPO', 
+            'EGPA', 'EGPB', 'EGPC', 'EGNM', 'EGBB', 'EGSH', 'EGPH', 'EGPK', 
+            'EGSS', 'EGPF', 'EGPD']
 NICE_LABELS = {
     'vis_decrease': 'Obs Vis Lower', 'vis_increase': 'Obs Vis Higher',
     'cld_decrease': 'Obs Cld Lower', 'cld_increase': 'Obs Cld Higher',

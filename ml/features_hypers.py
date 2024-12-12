@@ -1,3 +1,13 @@
+"""
+Module to compare feature selection and hyperparameter tuning.
+
+Functions:
+    main: Main function.
+    plot_features: Plots feature usage statistics.
+    plot_hyperparams: Plots hyperparameter statistics.
+
+Written by: Andre Lanyon
+"""
 import time
 import os
 import copy
@@ -22,7 +32,7 @@ pd.set_option('display.max_rows', None)
 
 def main():
     """
-    Main function...
+    Main function.
     """
     # For collecting feature stats
     best_features = {'xgboost_vis': {feat: 0 for feat in co.PARAM_COLS},
@@ -44,7 +54,8 @@ def main():
     for icao in co.ML_ICAOS:
         
         # Unpickle data
-        with open(f'{OUTPUT_DIR}/pickles/clfs_data_{icao}', 'rb') as file_object:
+        with open(f'{OUTPUT_DIR}/pickles/clfs_data_{icao}', 
+                  'rb') as file_object:
             unpickler = pickle.Unpickler(file_object)
             test_data, clf_models = unpickler.load()
 
@@ -89,7 +100,15 @@ def main():
 
 
 def plot_features(features, param):
+    """
+    Plots feature usage statistics.
 
+    Args:
+        features (dict): Feature usage statistics
+        param (str): Parameter
+    Returns:
+        None
+    """
     # Get best features
     xg_features = features[f'xgboost_{param}']
     rf_features = features[f'random_forest_{param}']
@@ -111,7 +130,7 @@ def plot_features(features, param):
     sns_features['Feature'] += list(perc_rf_features.keys())
     sns_features['Percentage'] += list(perc_rf_features.values())
     sns_features['Classifier'] += ['Random Forest'] * len(perc_rf_features)
-
+    
     # Create figure and axis
     fig, ax = plt.subplots(figsize=(9, 7))
 
@@ -145,7 +164,15 @@ def plot_features(features, param):
 
 
 def plot_hyperparams(hyperparams, model):
+    """
+    Plots hyperparameter statistics.
 
+    Args:
+        hyperparams (dict): Hyperparameter statistics
+        model (str): Model
+    Returns:
+        None
+    """
     # Get hyperparameters
     vis_hyperparams = hyperparams[f'{model}_vis']
     cld_hyperparams = hyperparams[f'{model}_cld']

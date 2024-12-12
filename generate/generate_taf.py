@@ -112,6 +112,7 @@ def get_taf_options(becmg_options_chunk, site_data):
 
     for option in becmg_options_chunk:
 
+        # Get base conditions and BECMG groups
         bases_becmgs = option['groups']
 
         # Add TEMPO/PROB groups for each weather parameter
@@ -193,7 +194,7 @@ def taf_gen(site_data):
     # Loop through becmg_options chunks, then find PROB/TEMPO groups for
     # each BECMG option and collect resulting TAF options
     for chunk in chunks:
-
+        
         # Define arguments for multiprocessing
         args = (get_taf_options, [chunk, site_data], queue)
 

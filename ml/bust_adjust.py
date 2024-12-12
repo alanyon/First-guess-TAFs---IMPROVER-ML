@@ -3,11 +3,12 @@ Module to predict bust labels and use these to adjust model data before
 generating TAFs.
 
 Functions:
+    main: Main function.
     adjust_vis_cld: Changes vis or cloud data based on bust labels.
     dt_calc: For creating column with datetimes.
     get_labels: Converts predicted integer classes to string labels.
-    pred_adjust: Predicts busts, adjusts model data using predictions.
-    update_taf: Predicts bust labels, adjusts model data, re-writes TAF.
+    pred_adjust: Predicts busts and adjusts model data.
+    update_taf: Predicts bust labels, adjusts data and re-writes TAF.   
 
 Written by Andre Lanyon
 """
@@ -35,7 +36,9 @@ pd.options.mode.chained_assignment = None
 
 
 def main():
-
+    """
+    Main function.
+    """
     # Get icao from date icao dictionary
     icao = co.DATE_ICAOS[FAKE_DATE]
 
@@ -141,7 +144,7 @@ def get_labels(X, clf_models, wx_type, c_name):
         X (pandas.DataFrame): Input data
         clf_models (dict): Dictionary of classifier models
         wx_type (str): Weather parameter
-        clf_type (str): Classifier type
+        c_name (str): Classifier name
     Returns:
         pred_labels (np.ndarray): Array of predicted labels
     """

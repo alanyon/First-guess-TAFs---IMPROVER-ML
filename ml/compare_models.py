@@ -1,3 +1,14 @@
+"""
+Module to compare model performance across different classifiers.
+
+Functions:
+
+    main: Main function.
+    plot_model_scores: Plots classifier performance metrics.
+    plot_model_times: Plots classifier processing times.
+
+Written by: Andre Lanyon
+"""
 import time
 import os
 import copy
@@ -26,7 +37,7 @@ NUM_ICAOS = len(co.ML_ICAOS)
 
 def main():
     """
-    Main function...
+    Main function.
     """
     # To collect classifier scores and processing times
     m_scores = {'Classifier': [], 'Performance Metric': [], 'Score': [],}
@@ -50,9 +61,14 @@ def main():
 
             # Update scores
             for eval_met in EVALS:
+
+                # Ignore minority scores
+                if 'minorities' in eval_met:
+                    continue
+
+                # Add details to dictionary
                 m_scores['Classifier'].append(MODELS[model])
-                nice_eval = eval_met.replace(' (', '\n(')
-                m_scores['Performance Metric'].append(nice_eval)
+                m_scores['Performance Metric'].append(eval_met)
                 m_scores['Score'].append(model_scores[eval_met])
 
             # Update times
@@ -118,7 +134,7 @@ def plot_model_times(m_times):
         None
     """
     # Create figure and axis
-    fig, ax = plt.subplots(figsize=(8, 6))
+    fig, ax = plt.subplots(figsize=(8, 5))
 
     # Create box plot separating by day period if necessary
     sns.boxplot(data=m_times, x='Classifier', y='Time', hue='Classifier')

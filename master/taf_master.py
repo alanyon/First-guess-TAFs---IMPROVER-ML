@@ -51,7 +51,7 @@ def main():
             continue
 
         # FOR TESTING
-        # if site_info['icao'] != 'EGNC':
+        # if site_info['icao'] != 'EGNT':
         #     continue
 
         print(site_info['icao'])
@@ -88,7 +88,7 @@ def main():
         else:
             ml_data = [[ml_df, site_df]]
 
-        # Pickle data
+        # Pickle data 
         pickle_data(ml_data, icao_pickle)
 
 

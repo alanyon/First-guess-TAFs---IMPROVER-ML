@@ -8,14 +8,14 @@ import numpy as np
 import pickle
 import pandas as pd
 import seaborn as sns
-from sklearn.metrics import precision_score, recall_score
+from sklearn.metrics import precision_score, recall_score, f1_score
 import common.configs as co
 import ml.train_busts as tr
 
 # Define constants
 OUTPUT_DIR = os.environ['OUTPUT_DIR']
 PARAMS = {'vis': 'Visibility', 'cld': 'Cloud'}
-MODELS = {'xgboost': 'XGBoost', 'random_forest': 'Random Forest'}
+MODELS = {'xgboost': 'XGBoost', 'random_forest': 'Random\nForest'}
 NUM_ICAOS = len(co.ML_ICAOS)
 
 
@@ -25,10 +25,12 @@ def main():
     """
     # For collecting feature stats
     scores = {
-        'vis': {'Airport': [], 'XGBoost Recall': [], 'XGBoost Precision': [], 
-                'Random Forest Recall': [], 'Random Forest Precision': []},
-        'cld': {'Airport': [], 'XGBoost Recall': [], 'XGBoost Precision': [], 
-                'Random Forest Recall': [], 'Random Forest Precision': []}
+        'vis': {'Airport': [], 'XGBoost\nRecall': [], 'XGBoost\nPrecision': [], 
+                'XGBoost\nF1 Score': [], 'Random\nForest\nRecall': [], 
+                'Random\nForest\nPrecision': [], 'Random\nForest\nF1 Score': []},
+        'cld': {'Airport': [], 'XGBoost\nRecall': [], 'XGBoost\nPrecision': [], 
+                'XGBoost\nF1 Score': [], 'Random\nForest\nRecall': [], 
+                'Random\nForest\nPrecision': [], 'Random\nForest\nF1 Score': []}
     }
 
     # Get dictionary mapping ICAOs to airport names
@@ -36,6 +38,10 @@ def main():
 
     # loop through all ICAOs
     for icao in co.ML_ICAOS:
+
+        # Only get stats from required ICAOs
+        if icao not in co.ML_ICAOS:
+            continue
         
         # Unpickle data
         with open(f'{OUTPUT_DIR}/pickles/clfs_data_{icao}', 'rb') as f_object:
@@ -72,10 +78,12 @@ def main():
                 # Get scores
                 recall = recall_score(y_test, y_pred, average='macro')
                 precision = precision_score(y_test, y_pred, average='macro')
+                f1 = f1_score(y_test, y_pred, average='macro')
 
                 # Update scores
-                scores[param][f'{MODELS[model]} Recall'].append(recall)
-                scores[param][f'{MODELS[model]} Precision'].append(precision)
+                scores[param][f'{MODELS[model]}\nRecall'].append(recall)
+                scores[param][f'{MODELS[model]}\nPrecision'].append(precision)
+                scores[param][f'{MODELS[model]}\nF1 Score'].append(f1)
 
     # Pickle scores
     with open(f'{OUTPUT_DIR}/pickles/scores', 'wb') as f_object:
@@ -127,18 +135,19 @@ def score_table(scores, param):
     custom_cmap = LinearSegmentedColormap.from_list('custom_red_green', clrs)
 
     # Create figure and axis
-    fig, ax = plt.subplots(figsize=(12, 14))
+    fig, ax = plt.subplots(figsize=(10, 12))
 
     # Create heatmap with color-coded P-values and T-statistics
-    sns.heatmap(scores_df, annot=scores_df, cmap=custom_cmap, center=0.5,
-                fmt='.2f', linewidths=0.5, cbar=False)
+    sns.heatmap(scores_df, annot=scores_df,  cmap=custom_cmap, center=0.5,
+                fmt='.2f', linewidths=0.5, cbar=False, 
+                annot_kws={"fontsize":12})
 
     # Edit axes labels
     labels = ax.get_xticklabels()
-    for label in labels:
-        # Insert \n in score labels
-        label.set_text(label.get_text().replace(' F1',
-                                                '\nF1').replace(' Pr', '\nPr'))
+    # for label in labels:
+    #     # Insert \n in score labels
+    #     label.set_text(label.get_text().replace(' F1',
+    #                                             '\nF1').replace(' Pr', '\nPr'))
     ax.set_xticklabels(labels, fontsize=14)
     ax.set_yticklabels(ax.get_yticklabels(), fontsize=14)
 
@@ -169,18 +178,24 @@ def make_boxplot(vis_scores, cld_scores):
     # Rearrange for plotting
     box_scores = {'Performance Metric': [], 'Model Type': [], 'Score': []}
     for _, row in scores_df.iterrows():
-        box_scores['Performance Metric'].append('Recall')
+        box_scores['Performance Metric'].append('F1 Score')
         box_scores['Model Type'].append(f'XGBoost ({row.Parameter})')
-        box_scores['Score'].append(row['XGBoost Recall'])
-        box_scores['Performance Metric'].append('Recall')
+        box_scores['Score'].append(row['XGBoost\nF1 Score'])
+        box_scores['Performance Metric'].append('F1 Score')
         box_scores['Model Type'].append(f'Random Forest ({row.Parameter})')
-        box_scores['Score'].append(row['Random Forest Recall'])
+        box_scores['Score'].append(row['Random\nForest\nF1 Score'])
         box_scores['Performance Metric'].append('Precision')
         box_scores['Model Type'].append(f'XGBoost ({row.Parameter})')
-        box_scores['Score'].append(row['XGBoost Precision'])
+        box_scores['Score'].append(row['XGBoost\nPrecision'])
         box_scores['Performance Metric'].append('Precision')
         box_scores['Model Type'].append(f'Random Forest ({row.Parameter})')
-        box_scores['Score'].append(row['Random Forest Precision'])
+        box_scores['Score'].append(row['Random\nForest\nPrecision'])
+        box_scores['Performance Metric'].append('Recall')
+        box_scores['Model Type'].append(f'XGBoost ({row.Parameter})')
+        box_scores['Score'].append(row['XGBoost\nRecall'])
+        box_scores['Performance Metric'].append('Recall')
+        box_scores['Model Type'].append(f'Random Forest ({row.Parameter})')
+        box_scores['Score'].append(row['Random\nForest\nRecall'])
 
     # Create figure and axis
     fig, ax = plt.subplots(figsize=(14, 8))
