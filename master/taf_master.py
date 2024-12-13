@@ -55,7 +55,8 @@ def main():
         #     continue
 
         # For info
-        print(site_info['icao'])
+        icao = site_info['icao']
+        print(icao)
 
         # Get data for airport
         site_df = ex.get_site_data(param_dfs_missing_times, site_info,
@@ -84,7 +85,7 @@ def main():
         ml_df = ds.get_ml_df(site_df, bust_labels=bust_labels)
 
         # Define pickle file path
-        icao_pickle = f'{VER_DIR}/pickles/pickle_{site_info["icao"]}'
+        icao_pickle = f'{VER_DIR}/pickles/pickle_{icao}'
 
         # If file already exists, add to it
         if os.path.exists(icao_pickle):
