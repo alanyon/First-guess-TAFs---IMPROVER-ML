@@ -767,15 +767,12 @@ def update_sig_wx(row):
     wx_str = ch.check_rate(row['precip_rate'], row['vis'], row['temp'],
                            wx_str)
 
-    # Check mist/fog
-    sig_wx = ch.check_mist_fog(row['vis'], row['temp'], row['rules_col'],
-                               wx_str)
+    # Ensure appropiate wx code is used based on visibility (mist and
+    # fog checked in here now)
+    sig_wx = ch.vis_based_wx(row['vis'], row['temp'], row['rules_col'],
+                             wx_str)
 
-    # # Ensure appropiate wx code is used based on visibility
-    # wx_str = ch.vis_based_wx(row['vis'], row['temp'], row['rules_col'],
-    #                          wx_str)
-
-    return wx_str
+    return sig_wx
 
 
 def update_sig_wx_for_new_vis(row):
@@ -832,18 +829,15 @@ def update_values(site_df):
     # For really low visibilities, force cloud to be on the surface
     site_df.loc[site_df['vis'] <= 500, ['cld_3', 'cld_5']] = 0
 
+    # Adjust visibility based on cloud base, wind and sig wx
+    site_df['vis'] = site_df.apply(update_vis, axis=1)
+
     # Convert sig wx codes and adjust to give TAF-appropriate values
     site_df['sig_wx'] = site_df.apply(update_sig_wx, axis=1)
 
     # Need to estimate sig wx for 30th, 40th, 60th and 70th percentiles
     # (not available in IMPROVER)
     site_df = fill_in_sig_wxs(site_df)
-
-    # # Adjust visibility based on cloud base, wind and sig wx
-    # site_df['vis'] = site_df.apply(update_vis, axis=1)
-
-    # # Update wx again with new visibilities
-    # site_df['sig_wx'] = site_df.apply(update_sig_wx, axis=1)
 
     # Get visibility and cloud TAF categories
     site_df['vis_cat'] = site_df.apply(vis_cat_row, axis=1)
@@ -865,8 +859,8 @@ def update_vis(row):
     # Check against cloud and wind
     vis = ch.check_vis_cld_wind(row['vis'], row['cld_5'], row['wind_mean'])
 
-    # Check against sig wx code
-    vis = ch.check_vis_sig_wx(row['sig_wx'], vis)
+    # # Check against sig wx code
+    # vis = ch.check_vis_sig_wx(row['sig_wx'], vis)
 
     return vis
 
