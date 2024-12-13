@@ -70,7 +70,7 @@ def main():
         ver_taf = ge.taf_gen(site_df)
         txt_file = f'{VER_DIR}/tafs/{icao}_all_old.txt'
         with open(txt_file, 'a', encoding='utf-8') as t_file:
-            t_file.write(taf)
+            t_file.write(ver_taf)
 
         # Change to format needed for bust labels
         taf = ver_taf[46:].split()
