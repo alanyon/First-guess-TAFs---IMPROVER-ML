@@ -298,7 +298,7 @@ def taf_text(site_data, bases_changes):
     num_spaces = 12 - len(ordered_groups)
     nice_taf += '\n' * num_spaces
 
-    # print(nice_taf)
+    print(nice_taf)
 
     # Create verification-friendly TAF
     ver_taf = ver_format(taf_str, site_data)

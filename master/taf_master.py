@@ -54,8 +54,10 @@ def main():
         # if site_info['icao'] != 'EGNT':
         #     continue
 
+        # For info
         print(site_info['icao'])
 
+        # Get data for airport
         site_df = ex.get_site_data(param_dfs_missing_times, site_info,
                                    taf_dts)
 
@@ -63,8 +65,13 @@ def main():
         if site_df.empty:
             continue
 
-        # Generate TAF and change to format needed for bust labels
+        # Generate TAF and write to txt file
         ver_taf = ge.taf_gen(site_df)
+        txt_file = f'{VER_DIR}/tafs/{icao}_all_old.txt'
+        with open(txt_file, 'a', encoding='utf-8') as t_file:
+            t_file.write(taf)
+
+        # Change to format needed for bust labels
         taf = ver_taf[46:].split()
 
         # Get label for TAF based on whether it would have gone bust
