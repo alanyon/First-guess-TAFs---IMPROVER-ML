@@ -194,7 +194,7 @@ def taf_gen(site_data):
     # Loop through becmg_options chunks, then find PROB/TEMPO groups for
     # each BECMG option and collect resulting TAF options
     for chunk in chunks:
-        
+
         # Define arguments for multiprocessing
         args = (get_taf_options, [chunk, site_data], queue)
 
