@@ -344,15 +344,7 @@ def get_clf(clf_models, X_train, all_y_train, X_test, all_y_test, plot_dir,
         opt_model = optimise_hypers(X_train, y_train, X_train_b, y_train_b,
                                     model_name)
     else:
-        if model_name == 'XGBoost':
-            opt_model = XGBClassifier(**XG_DEFAULTS)
-        elif model_name == 'Random Forest':
-            opt_model = RandomForestClassifier(random_state=42)
-        elif model_name == 'Decision Tree':
-            opt_model = DecisionTreeClassifier(random_state=42)
-        elif model_name == 'Gradient Boosting':
-            opt_model = GradientBoostingClassifier(random_state=42)
-        opt_model.fit(X_train_b, y_train_b)
+        opt_model = default
 
     # Define optimal classifier and print score
     y_pred_opt = opt_model.predict(X_test)
