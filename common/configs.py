@@ -31,7 +31,7 @@ IMPROVER_PARAMETERS = {
         {'data_type': 'percentiles',
          'short_name': 'vis',
          'units': 'm',
-         'fname_start': 'spotperc_extract_',
+         'fname_start': 'percentile_extract_spot_',
          'fname_start_alt': 'spotperc_extract_'},
     'weather_symbols-PT01H':
         {'data_type': 'deterministic',
