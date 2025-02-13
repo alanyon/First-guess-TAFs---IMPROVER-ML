@@ -27,7 +27,7 @@ IMPROVER_PARAMETERS = {
          'units': 'mm hr-1',
          'fname_start': 'spotperc_extract_',
          'fname_start_alt': 'spotperc_extract_'},
-    'visibility_at_screen_level_in_vicinity':
+    'visibility_at_screen_level':
         {'data_type': 'percentiles',
          'short_name': 'vis',
          'units': 'm',
