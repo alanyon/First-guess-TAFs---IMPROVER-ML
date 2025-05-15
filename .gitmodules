@@ -1,3 +1,6 @@
 [submodule "taf_generator"]
 	path = taf_generator
 	url = git@github.com:alanyon/taf_generator.git
+[submodule "taf_monitor"]
+	path = taf_monitor
+	url = git@github.com:MetOffice/taf_monitor.git
